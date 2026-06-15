@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
+import PartidoCard from "./components/PartidoCard"
 import { auth, db } from "./firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "firebase/firestore"
@@ -9,104 +10,107 @@ const torneoFinalizado = () => new Date() > FECHA_LIMITE
 
 const GRUPOS = {
   A: [
-    { id: "A1", local: "México", visitante: "Sudáfrica", fecha: "11 jun 2026", estadio: "Estadio Ciudad de México", flagLocal: "mx", flagVisitante: "za" },
-    { id: "A2", local: "Corea del Sur", visitante: "Chequia", fecha: "11 jun 2026", estadio: "Estadio Guadalajara", flagLocal: "kr", flagVisitante: "cz" },
-    { id: "A3", local: "México", visitante: "Corea del Sur", fecha: "15 jun 2026", estadio: "Estadio Guadalajara", flagLocal: "mx", flagVisitante: "kr" },
-    { id: "A4", local: "Chequia", visitante: "Sudáfrica", fecha: "15 jun 2026", estadio: "Estadio Ciudad de México", flagLocal: "cz", flagVisitante: "za" },
-    { id: "A5", local: "Chequia", visitante: "México", fecha: "19 jun 2026", estadio: "Estadio Ciudad de México", flagLocal: "cz", flagVisitante: "mx" },
-    { id: "A6", local: "Sudáfrica", visitante: "Corea del Sur", fecha: "19 jun 2026", estadio: "Estadio Guadalajara", flagLocal: "za", flagVisitante: "kr" },
+    { id: "A1", local: "México", visitante: "Sudáfrica", fecha: "11 jun 2026", hora: "2026-06-11T14:00:00", estadio: "Estadio Ciudad de México", flagLocal: "mx", flagVisitante: "za" },
+    { id: "A2", local: "Corea del Sur", visitante: "Chequia", fecha: "11 jun 2026", hora: "2026-06-11T14:00:00", estadio: "Estadio Guadalajara", flagLocal: "kr", flagVisitante: "cz" },
+    { id: "A3", local: "México", visitante: "Corea del Sur", fecha: "18 jun 2026", hora: "2026-06-18T22:00:00", estadio: "Estadio Guadalajara", flagLocal: "mx", flagVisitante: "kr" },
+    { id: "A4", local: "Chequia", visitante: "Sudáfrica", fecha: "18 jun 2026", hora: "2026-06-18T11:00:00", estadio: "Estadio Atlanta", flagLocal: "cz", flagVisitante: "za" },
+    { id: "A5", local: "Chequia", visitante: "México", fecha: "22 jun 2026", hora: "2026-06-22T23:00:00", estadio: "Estadio Ciudad de México", flagLocal: "cz", flagVisitante: "mx" },
+    { id: "A6", local: "Sudáfrica", visitante: "Corea del Sur", fecha: "22 jun 2026", hora: "2026-06-22T23:00:00", estadio: "Estadio Guadalajara", flagLocal: "za", flagVisitante: "kr" },
   ],
   B: [
-    { id: "B1", local: "Canadá", visitante: "Bosnia", fecha: "12 jun 2026", estadio: "Estadio Toronto", flagLocal: "ca", flagVisitante: "ba" },
-    { id: "B2", local: "Catar", visitante: "Suiza", fecha: "12 jun 2026", estadio: "Estadio Nueva York", flagLocal: "qa", flagVisitante: "ch" },
-    { id: "B3", local: "Canadá", visitante: "Catar", fecha: "16 jun 2026", estadio: "Estadio Toronto", flagLocal: "ca", flagVisitante: "qa" },
-    { id: "B4", local: "Suiza", visitante: "Bosnia", fecha: "16 jun 2026", estadio: "Estadio Nueva York", flagLocal: "ch", flagVisitante: "ba" },
-    { id: "B5", local: "Suiza", visitante: "Canadá", fecha: "20 jun 2026", estadio: "Estadio Nueva York", flagLocal: "ch", flagVisitante: "ca" },
-    { id: "B6", local: "Bosnia", visitante: "Catar", fecha: "20 jun 2026", estadio: "Estadio Toronto", flagLocal: "ba", flagVisitante: "qa" },
+    { id: "B1", local: "Canadá", visitante: "Bosnia", fecha: "12 jun 2026", hora: "2026-06-12T11:00:00", estadio: "Estadio Toronto", flagLocal: "ca", flagVisitante: "ba" },
+    { id: "B2", local: "Catar", visitante: "Suiza", fecha: "12 jun 2026", hora: "2026-06-12T11:00:00", estadio: "Estadio Nueva York", flagLocal: "qa", flagVisitante: "ch" },
+    { id: "B3", local: "Canadá", visitante: "Catar", fecha: "18 jun 2026", hora: "2026-06-18T17:00:00", estadio: "Estadio Toronto", flagLocal: "ca", flagVisitante: "qa" },
+    { id: "B4", local: "Suiza", visitante: "Bosnia", fecha: "18 jun 2026", hora: "2026-06-18T14:00:00", estadio: "Estadio Nueva York", flagLocal: "ch", flagVisitante: "ba" },
+    { id: "B5", local: "Suiza", visitante: "Canadá", fecha: "22 jun 2026", hora: "2026-06-22T14:00:00", estadio: "Estadio Vancouver", flagLocal: "ch", flagVisitante: "ca" },
+    { id: "B6", local: "Bosnia", visitante: "Catar", fecha: "22 jun 2026", hora: "2026-06-22T14:00:00", estadio: "Estadio Toronto", flagLocal: "ba", flagVisitante: "qa" },
   ],
   C: [
-    { id: "C1", local: "Brasil", visitante: "Marruecos", fecha: "13 jun 2026", estadio: "Estadio Los Ángeles", flagLocal: "br", flagVisitante: "ma" },
-    { id: "C2", local: "Haití", visitante: "Escocia", fecha: "13 jun 2026", estadio: "Estadio San Francisco", flagLocal: "ht", flagVisitante: "gb-sct" },
-    { id: "C3", local: "Brasil", visitante: "Haití", fecha: "17 jun 2026", estadio: "Estadio Los Ángeles", flagLocal: "br", flagVisitante: "ht" },
-    { id: "C4", local: "Escocia", visitante: "Marruecos", fecha: "17 jun 2026", estadio: "Estadio San Francisco", flagLocal: "gb-sct", flagVisitante: "ma" },
-    { id: "C5", local: "Escocia", visitante: "Brasil", fecha: "21 jun 2026", estadio: "Estadio San Francisco", flagLocal: "gb-sct", flagVisitante: "br" },
-    { id: "C6", local: "Marruecos", visitante: "Haití", fecha: "21 jun 2026", estadio: "Estadio Los Ángeles", flagLocal: "ma", flagVisitante: "ht" },
+    { id: "C1", local: "Brasil", visitante: "Marruecos", fecha: "13 jun 2026", hora: "2026-06-13T14:00:00", estadio: "Estadio Los Ángeles", flagLocal: "br", flagVisitante: "ma" },
+    { id: "C2", local: "Haití", visitante: "Escocia", fecha: "13 jun 2026", hora: "2026-06-13T11:00:00", estadio: "Estadio San Francisco", flagLocal: "ht", flagVisitante: "gb-sct" },
+    { id: "C3", local: "Brasil", visitante: "Haití", fecha: "19 jun 2026", hora: "2026-06-19T20:30:00", estadio: "Estadio Los Ángeles", flagLocal: "br", flagVisitante: "ht" },
+    { id: "C4", local: "Escocia", visitante: "Marruecos", fecha: "19 jun 2026", hora: "2026-06-19T17:00:00", estadio: "Estadio Boston", flagLocal: "gb-sct", flagVisitante: "ma" },
+    { id: "C5", local: "Escocia", visitante: "Brasil", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio Miami", flagLocal: "gb-sct", flagVisitante: "br" },
+    { id: "C6", local: "Marruecos", visitante: "Haití", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio Atlanta", flagLocal: "ma", flagVisitante: "ht" },
   ],
   D: [
-    { id: "D1", local: "USA", visitante: "Paraguay", fecha: "12 jun 2026", estadio: "Estadio Los Ángeles", flagLocal: "us", flagVisitante: "py" },
-    { id: "D2", local: "Australia", visitante: "Turquía", fecha: "12 jun 2026", estadio: "Estadio Dallas", flagLocal: "au", flagVisitante: "tr" },
-    { id: "D3", local: "USA", visitante: "Australia", fecha: "16 jun 2026", estadio: "Estadio Los Ángeles", flagLocal: "us", flagVisitante: "au" },
-    { id: "D4", local: "Turquía", visitante: "Paraguay", fecha: "16 jun 2026", estadio: "Estadio Dallas", flagLocal: "tr", flagVisitante: "py" },
-    { id: "D5", local: "Turquía", visitante: "USA", fecha: "20 jun 2026", estadio: "Estadio Dallas", flagLocal: "tr", flagVisitante: "us" },
-    { id: "D6", local: "Paraguay", visitante: "Australia", fecha: "20 jun 2026", estadio: "Estadio Los Ángeles", flagLocal: "py", flagVisitante: "au" },
+    { id: "D1", local: "Australia", visitante: "Turquía", fecha: "12 jun 2026", hora: "2026-06-12T14:00:00", estadio: "Estadio Vancouver", flagLocal: "au", flagVisitante: "tr" },
+    { id: "D2", local: "USA", visitante: "Paraguay", fecha: "12 jun 2026", hora: "2026-06-12T11:00:00", estadio: "Estadio Los Ángeles", flagLocal: "us", flagVisitante: "py" },
+    { id: "D3", local: "USA", visitante: "Australia", fecha: "19 jun 2026", hora: "2026-06-19T14:00:00", estadio: "Estadio Seattle", flagLocal: "us", flagVisitante: "au" },
+    { id: "D4", local: "Turquía", visitante: "Paraguay", fecha: "19 jun 2026", hora: "2026-06-19T11:00:00", estadio: "Estadio Dallas", flagLocal: "tr", flagVisitante: "py" },
+    { id: "D5", local: "Turquía", visitante: "USA", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio Los Ángeles", flagLocal: "tr", flagVisitante: "us" },
+    { id: "D6", local: "Paraguay", visitante: "Australia", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio San Francisco", flagLocal: "py", flagVisitante: "au" },
   ],
   E: [
-    { id: "E1", local: "Alemania", visitante: "Curaçao", fecha: "13 jun 2026", estadio: "Estadio Filadelfia", flagLocal: "de", flagVisitante: "cw" },
-    { id: "E2", local: "Costa de Marfil", visitante: "Ecuador", fecha: "13 jun 2026", estadio: "Estadio Boston", flagLocal: "ci", flagVisitante: "ec" },
-    { id: "E3", local: "Alemania", visitante: "Costa de Marfil", fecha: "17 jun 2026", estadio: "Estadio Filadelfia", flagLocal: "de", flagVisitante: "ci" },
-    { id: "E4", local: "Ecuador", visitante: "Curaçao", fecha: "17 jun 2026", estadio: "Estadio Boston", flagLocal: "ec", flagVisitante: "cw" },
-    { id: "E5", local: "Ecuador", visitante: "Alemania", fecha: "21 jun 2026", estadio: "Estadio Boston", flagLocal: "ec", flagVisitante: "de" },
-    { id: "E6", local: "Curaçao", visitante: "Costa de Marfil", fecha: "21 jun 2026", estadio: "Estadio Filadelfia", flagLocal: "cw", flagVisitante: "ci" },
+    { id: "E1", local: "Alemania", visitante: "Curaçao", fecha: "13 jun 2026", hora: "2026-06-13T14:00:00", estadio: "Estadio Houston", flagLocal: "de", flagVisitante: "cw" },
+    { id: "E2", local: "Costa de Marfil", visitante: "Ecuador", fecha: "14 jun 2026", hora: "2026-06-14T18:00:00", estadio: "Estadio Filadelfia", flagLocal: "ci", flagVisitante: "ec" },
+    { id: "E3", local: "Alemania", visitante: "Costa de Marfil", fecha: "20 jun 2026", hora: "2026-06-20T15:00:00", estadio: "Estadio Toronto", flagLocal: "de", flagVisitante: "ci" },
+    { id: "E4", local: "Ecuador", visitante: "Curaçao", fecha: "20 jun 2026", hora: "2026-06-20T19:00:00", estadio: "Estadio Kansas City", flagLocal: "ec", flagVisitante: "cw" },
+    { id: "E5", local: "Ecuador", visitante: "Alemania", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Nueva Jersey", flagLocal: "ec", flagVisitante: "de" },
+    { id: "E6", local: "Curaçao", visitante: "Costa de Marfil", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Filadelfia", flagLocal: "cw", flagVisitante: "ci" },
   ],
   F: [
-    { id: "F1", local: "Países Bajos", visitante: "Japón", fecha: "14 jun 2026", estadio: "Estadio Seattle", flagLocal: "nl", flagVisitante: "jp" },
-    { id: "F2", local: "Suecia", visitante: "Túnez", fecha: "14 jun 2026", estadio: "Estadio Vancouver", flagLocal: "se", flagVisitante: "tn" },
-    { id: "F3", local: "Países Bajos", visitante: "Suecia", fecha: "18 jun 2026", estadio: "Estadio Seattle", flagLocal: "nl", flagVisitante: "se" },
-    { id: "F4", local: "Túnez", visitante: "Japón", fecha: "18 jun 2026", estadio: "Estadio Vancouver", flagLocal: "tn", flagVisitante: "jp" },
-    { id: "F5", local: "Túnez", visitante: "Países Bajos", fecha: "22 jun 2026", estadio: "Estadio Vancouver", flagLocal: "tn", flagVisitante: "nl" },
-    { id: "F6", local: "Japón", visitante: "Suecia", fecha: "22 jun 2026", estadio: "Estadio Seattle", flagLocal: "jp", flagVisitante: "se" },
+    { id: "F1", local: "Países Bajos", visitante: "Japón", fecha: "14 jun 2026", hora: "2026-06-14T15:00:00", estadio: "Estadio Arlington", flagLocal: "nl", flagVisitante: "jp" },
+    { id: "F2", local: "Suecia", visitante: "Túnez", fecha: "14 jun 2026", hora: "2026-06-14T21:00:00", estadio: "Estadio Monterrey", flagLocal: "se", flagVisitante: "tn" },
+    { id: "F3", local: "Países Bajos", visitante: "Suecia", fecha: "20 jun 2026", hora: "2026-06-20T12:00:00", estadio: "Estadio Houston", flagLocal: "nl", flagVisitante: "se" },
+    { id: "F4", local: "Túnez", visitante: "Japón", fecha: "20 jun 2026", hora: "2026-06-20T23:00:00", estadio: "Estadio Kansas City", flagLocal: "tn", flagVisitante: "jp" },
+    { id: "F5", local: "Túnez", visitante: "Países Bajos", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Kansas City", flagLocal: "tn", flagVisitante: "nl" },
+    { id: "F6", local: "Japón", visitante: "Suecia", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Arlington", flagLocal: "jp", flagVisitante: "se" },
   ],
   G: [
-    { id: "G1", local: "Bélgica", visitante: "Egipto", fecha: "14 jun 2026", estadio: "Estadio Atlanta", flagLocal: "be", flagVisitante: "eg" },
-    { id: "G2", local: "Irán", visitante: "Nueva Zelanda", fecha: "14 jun 2026", estadio: "Estadio Miami", flagLocal: "ir", flagVisitante: "nz" },
-    { id: "G3", local: "Bélgica", visitante: "Irán", fecha: "18 jun 2026", estadio: "Estadio Atlanta", flagLocal: "be", flagVisitante: "ir" },
-    { id: "G4", local: "Nueva Zelanda", visitante: "Egipto", fecha: "18 jun 2026", estadio: "Estadio Miami", flagLocal: "nz", flagVisitante: "eg" },
-    { id: "G5", local: "Nueva Zelanda", visitante: "Bélgica", fecha: "22 jun 2026", estadio: "Estadio Miami", flagLocal: "nz", flagVisitante: "be" },
-    { id: "G6", local: "Egipto", visitante: "Irán", fecha: "22 jun 2026", estadio: "Estadio Atlanta", flagLocal: "eg", flagVisitante: "ir" },
+    { id: "G1", local: "Bélgica", visitante: "Egipto", fecha: "15 jun 2026", hora: "2026-06-15T14:00:00", estadio: "Estadio Atlanta", flagLocal: "be", flagVisitante: "eg" },
+    { id: "G2", local: "Irán", visitante: "Nueva Zelanda", fecha: "15 jun 2026", hora: "2026-06-15T20:00:00", estadio: "Estadio Miami", flagLocal: "ir", flagVisitante: "nz" },
+    { id: "G3", local: "Bélgica", visitante: "Irán", fecha: "21 jun 2026", hora: "2026-06-21T14:00:00", estadio: "Estadio Los Ángeles", flagLocal: "be", flagVisitante: "ir" },
+    { id: "G4", local: "Nueva Zelanda", visitante: "Egipto", fecha: "21 jun 2026", hora: "2026-06-21T20:00:00", estadio: "Estadio Vancouver", flagLocal: "nz", flagVisitante: "eg" },
+    { id: "G5", local: "Nueva Zelanda", visitante: "Bélgica", fecha: "25 jun 2026", hora: "2026-06-25T20:00:00", estadio: "Estadio Miami", flagLocal: "nz", flagVisitante: "be" },
+    { id: "G6", local: "Egipto", visitante: "Irán", fecha: "25 jun 2026", hora: "2026-06-25T20:00:00", estadio: "Estadio Atlanta", flagLocal: "eg", flagVisitante: "ir" },
   ],
   H: [
-    { id: "H1", local: "España", visitante: "Cabo Verde", fecha: "15 jun 2026", estadio: "Estadio Houston", flagLocal: "es", flagVisitante: "cv" },
-    { id: "H2", local: "Arabia Saudí", visitante: "Uruguay", fecha: "15 jun 2026", estadio: "Estadio Dallas", flagLocal: "sa", flagVisitante: "uy" },
-    { id: "H3", local: "España", visitante: "Arabia Saudí", fecha: "19 jun 2026", estadio: "Estadio Houston", flagLocal: "es", flagVisitante: "sa" },
-    { id: "H4", local: "Uruguay", visitante: "Cabo Verde", fecha: "19 jun 2026", estadio: "Estadio Dallas", flagLocal: "uy", flagVisitante: "cv" },
-    { id: "H5", local: "Uruguay", visitante: "España", fecha: "23 jun 2026", estadio: "Estadio Dallas", flagLocal: "uy", flagVisitante: "es" },
-    { id: "H6", local: "Cabo Verde", visitante: "Arabia Saudí", fecha: "23 jun 2026", estadio: "Estadio Houston", flagLocal: "cv", flagVisitante: "sa" },
+    { id: "H1", local: "España", visitante: "Cabo Verde", fecha: "15 jun 2026", hora: "2026-06-15T11:00:00", estadio: "Estadio Atlanta", flagLocal: "es", flagVisitante: "cv" },
+    { id: "H2", local: "Arabia Saudí", visitante: "Uruguay", fecha: "15 jun 2026", hora: "2026-06-15T17:00:00", estadio: "Estadio Dallas", flagLocal: "sa", flagVisitante: "uy" },
+    { id: "H3", local: "España", visitante: "Arabia Saudí", fecha: "21 jun 2026", hora: "2026-06-21T11:00:00", estadio: "Estadio Atlanta", flagLocal: "es", flagVisitante: "sa" },
+    { id: "H4", local: "Uruguay", visitante: "Cabo Verde", fecha: "21 jun 2026", hora: "2026-06-21T17:00:00", estadio: "Estadio Miami", flagLocal: "uy", flagVisitante: "cv" },
+    { id: "H5", local: "Uruguay", visitante: "España", fecha: "25 jun 2026", hora: "2026-06-25T14:00:00", estadio: "Estadio Dallas", flagLocal: "uy", flagVisitante: "es" },
+    { id: "H6", local: "Cabo Verde", visitante: "Arabia Saudí", fecha: "25 jun 2026", hora: "2026-06-25T14:00:00", estadio: "Estadio Houston", flagLocal: "cv", flagVisitante: "sa" },
   ],
   I: [
-    { id: "I1", local: "Francia", visitante: "Senegal", fecha: "15 jun 2026", estadio: "Estadio Nueva York", flagLocal: "fr", flagVisitante: "sn" },
-    { id: "I2", local: "Irak", visitante: "Noruega", fecha: "15 jun 2026", estadio: "Estadio Boston", flagLocal: "iq", flagVisitante: "no" },
-    { id: "I3", local: "Francia", visitante: "Irak", fecha: "19 jun 2026", estadio: "Estadio Nueva York", flagLocal: "fr", flagVisitante: "iq" },
-    { id: "I4", local: "Noruega", visitante: "Senegal", fecha: "19 jun 2026", estadio: "Estadio Boston", flagLocal: "no", flagVisitante: "sn" },
-    { id: "I5", local: "Noruega", visitante: "Francia", fecha: "23 jun 2026", estadio: "Estadio Boston", flagLocal: "no", flagVisitante: "fr" },
-    { id: "I6", local: "Senegal", visitante: "Irak", fecha: "23 jun 2026", estadio: "Estadio Nueva York", flagLocal: "sn", flagVisitante: "iq" },
+    { id: "I1", local: "Francia", visitante: "Senegal", fecha: "16 jun 2026", hora: "2026-06-16T14:00:00", estadio: "Estadio Nueva York", flagLocal: "fr", flagVisitante: "sn" },
+    { id: "I2", local: "Irak", visitante: "Noruega", fecha: "16 jun 2026", hora: "2026-06-16T17:00:00", estadio: "Estadio Boston", flagLocal: "iq", flagVisitante: "no" },
+    { id: "I3", local: "Francia", visitante: "Irak", fecha: "22 jun 2026", hora: "2026-06-22T16:00:00", estadio: "Estadio Filadelfia", flagLocal: "fr", flagVisitante: "iq" },
+    { id: "I4", local: "Noruega", visitante: "Senegal", fecha: "22 jun 2026", hora: "2026-06-22T19:00:00", estadio: "Estadio Nueva York", flagLocal: "no", flagVisitante: "sn" },
+    { id: "I5", local: "Noruega", visitante: "Francia", fecha: "26 jun 2026", hora: "2026-06-26T19:00:00", estadio: "Estadio Boston", flagLocal: "no", flagVisitante: "fr" },
+    { id: "I6", local: "Senegal", visitante: "Irak", fecha: "26 jun 2026", hora: "2026-06-26T19:00:00", estadio: "Estadio Nueva York", flagLocal: "sn", flagVisitante: "iq" },
   ],
   J: [
-    { id: "J1", local: "Argentina", visitante: "Argelia", fecha: "16 jun 2026", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "dz" },
-    { id: "J2", local: "Austria", visitante: "Jordania", fecha: "16 jun 2026", estadio: "Estadio Miami", flagLocal: "at", flagVisitante: "jo" },
-    { id: "J3", local: "Argentina", visitante: "Austria", fecha: "20 jun 2026", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "at" },
-    { id: "J4", local: "Jordania", visitante: "Argelia", fecha: "20 jun 2026", estadio: "Estadio Miami", flagLocal: "jo", flagVisitante: "dz" },
-    { id: "J5", local: "Jordania", visitante: "Argentina", fecha: "24 jun 2026", estadio: "Estadio Miami", flagLocal: "jo", flagVisitante: "ar" },
-    { id: "J6", local: "Argelia", visitante: "Austria", fecha: "24 jun 2026", estadio: "Estadio Dallas", flagLocal: "dz", flagVisitante: "at" },
+    { id: "J1", local: "Argentina", visitante: "Argelia", fecha: "16 jun 2026", hora: "2026-06-16T20:00:00", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "dz" },
+    { id: "J2", local: "Austria", visitante: "Jordania", fecha: "16 jun 2026", hora: "2026-06-16T23:00:00", estadio: "Estadio San Francisco", flagLocal: "at", flagVisitante: "jo" },
+    { id: "J3", local: "Argentina", visitante: "Austria", fecha: "22 jun 2026", hora: "2026-06-22T12:00:00", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "at" },
+    { id: "J4", local: "Jordania", visitante: "Argelia", fecha: "22 jun 2026", hora: "2026-06-22T16:00:00", estadio: "Estadio Miami", flagLocal: "jo", flagVisitante: "dz" },
+    { id: "J5", local: "Jordania", visitante: "Argentina", fecha: "26 jun 2026", hora: "2026-06-26T23:30:00", estadio: "Estadio Arlington", flagLocal: "jo", flagVisitante: "ar" },
+    { id: "J6", local: "Argelia", visitante: "Austria", fecha: "26 jun 2026", hora: "2026-06-26T23:30:00", estadio: "Estadio Kansas City", flagLocal: "dz", flagVisitante: "at" },
   ],
   K: [
-    { id: "K1", local: "Portugal", visitante: "DR Congo", fecha: "16 jun 2026", estadio: "Estadio Kansas City", flagLocal: "pt", flagVisitante: "cd" },
-    { id: "K2", local: "Uzbekistán", visitante: "Colombia", fecha: "16 jun 2026", estadio: "Estadio Seattle", flagLocal: "uz", flagVisitante: "co" },
-    { id: "K3", local: "Portugal", visitante: "Uzbekistán", fecha: "20 jun 2026", estadio: "Estadio Kansas City", flagLocal: "pt", flagVisitante: "uz" },
-    { id: "K4", local: "Colombia", visitante: "DR Congo", fecha: "20 jun 2026", estadio: "Estadio Seattle", flagLocal: "co", flagVisitante: "cd" },
-    { id: "K5", local: "Colombia", visitante: "Portugal", fecha: "24 jun 2026", estadio: "Estadio Seattle", flagLocal: "co", flagVisitante: "pt" },
-    { id: "K6", local: "DR Congo", visitante: "Uzbekistán", fecha: "24 jun 2026", estadio: "Estadio Kansas City", flagLocal: "cd", flagVisitante: "uz" },
+    { id: "K1", local: "Portugal", visitante: "DR Congo", fecha: "17 jun 2026", hora: "2026-06-17T12:00:00", estadio: "Estadio Houston", flagLocal: "pt", flagVisitante: "cd" },
+    { id: "K2", local: "Uzbekistán", visitante: "Colombia", fecha: "17 jun 2026", hora: "2026-06-17T21:00:00", estadio: "Estadio Ciudad de México", flagLocal: "uz", flagVisitante: "co" },
+    { id: "K3", local: "Portugal", visitante: "Uzbekistán", fecha: "23 jun 2026", hora: "2026-06-23T12:00:00", estadio: "Estadio Houston", flagLocal: "pt", flagVisitante: "uz" },
+    { id: "K4", local: "Colombia", visitante: "DR Congo", fecha: "23 jun 2026", hora: "2026-06-23T21:00:00", estadio: "Estadio Seattle", flagLocal: "co", flagVisitante: "cd" },
+    { id: "K5", local: "Colombia", visitante: "Portugal", fecha: "27 jun 2026", hora: "2026-06-27T23:30:00", estadio: "Estadio Miami", flagLocal: "co", flagVisitante: "pt" },
+    { id: "K6", local: "DR Congo", visitante: "Uzbekistán", fecha: "27 jun 2026", hora: "2026-06-27T23:30:00", estadio: "Estadio Atlanta", flagLocal: "cd", flagVisitante: "uz" },
   ],
   L: [
-    { id: "L1", local: "Inglaterra", visitante: "Croacia", fecha: "17 jun 2026", estadio: "Estadio Chicago", flagLocal: "gb-eng", flagVisitante: "hr" },
-    { id: "L2", local: "Ghana", visitante: "Panamá", fecha: "17 jun 2026", estadio: "Estadio Monterrey", flagLocal: "gh", flagVisitante: "pa" },
-    { id: "L3", local: "Inglaterra", visitante: "Ghana", fecha: "21 jun 2026", estadio: "Estadio Chicago", flagLocal: "gb-eng", flagVisitante: "gh" },
-    { id: "L4", local: "Panamá", visitante: "Croacia", fecha: "21 jun 2026", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "hr" },
-    { id: "L5", local: "Panamá", visitante: "Inglaterra", fecha: "25 jun 2026", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "gb-eng" },
-    { id: "L6", local: "Croacia", visitante: "Ghana", fecha: "25 jun 2026", estadio: "Estadio Chicago", flagLocal: "hr", flagVisitante: "gh" },
+    { id: "L1", local: "Inglaterra", visitante: "Croacia", fecha: "17 jun 2026", hora: "2026-06-17T15:00:00", estadio: "Estadio Arlington", flagLocal: "gb-eng", flagVisitante: "hr" },
+    { id: "L2", local: "Ghana", visitante: "Panamá", fecha: "17 jun 2026", hora: "2026-06-17T18:00:00", estadio: "Estadio Toronto", flagLocal: "gh", flagVisitante: "pa" },
+    { id: "L3", local: "Inglaterra", visitante: "Ghana", fecha: "23 jun 2026", hora: "2026-06-23T15:00:00", estadio: "Estadio Boston", flagLocal: "gb-eng", flagVisitante: "gh" },
+    { id: "L4", local: "Panamá", visitante: "Croacia", fecha: "23 jun 2026", hora: "2026-06-23T18:00:00", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "hr" },
+    { id: "L5", local: "Panamá", visitante: "Inglaterra", fecha: "27 jun 2026", hora: "2026-06-27T20:00:00", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "gb-eng" },
+    { id: "L6", local: "Croacia", visitante: "Ghana", fecha: "27 jun 2026", hora: "2026-06-27T20:00:00", estadio: "Estadio Chicago", flagLocal: "hr", flagVisitante: "gh" },
   ],
 }
 
 const TODOS_PARTIDOS = Object.values(GRUPOS).flat()
+
+  // Lista de partidos ordenada por fecha (datos estáticos, se ordena una vez)
+  const sortedPartidos = [...TODOS_PARTIDOS].sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
 
 export default function App() {
   const [email, setEmail] = useState("")
@@ -121,6 +125,7 @@ export default function App() {
   const [grupoActivo, setGrupoActivo] = useState("A")
   const [tabla, setTabla] = useState([])
   const [resultados, setResultados] = useState({})
+  const [marcadores, setMarcadores] = useState({})
   const [usuariosAdmin, setUsuariosAdmin] = useState([])
   const [grupoAdminActivo, setGrupoAdminActivo] = useState("A")
   const [adminTab, setAdminTab] = useState("resultados")
@@ -129,6 +134,10 @@ export default function App() {
   const [modalUsuario, setModalUsuario] = useState(null)
   const [modalGrupo, setModalGrupo] = useState("A")
   const [perfilData, setPerfilData] = useState(null)
+  const [gruposData, setGruposData] = useState({})
+  const [compararConUID, setCompararConUID] = useState(null)
+  const [comparacionData, setComparacionData] = useState(null)
+  
 
   useEffect(() => {
     const interval = setInterval(() => setAhora(new Date()), 1000)
@@ -184,7 +193,10 @@ export default function App() {
 
   const cargarResultados = async () => {
     const snap = await getDoc(doc(db, "resultados", "oficial"))
-    if (snap.exists()) setResultados(snap.data().picks || {})
+    if (snap.exists()) {
+      setResultados(snap.data().picks || {})
+      setMarcadores(snap.data().marcadores || {})
+    }
   }
 
   const cargarTabla = async () => {
@@ -204,6 +216,36 @@ export default function App() {
     })
     filas.sort((a, b) => b.puntos - a.puntos)
     setTabla(filas)
+  }
+
+  const cargarGrupos = async () => {
+    const snap = await getDoc(doc(db, "resultados", "oficial"))
+    const marc = snap.exists() ? snap.data().marcadores || {} : {}
+    const standings = {}
+    Object.keys(GRUPOS).forEach(g => {
+      const equipos = {}
+      const teams = [...new Set(GRUPOS[g].flatMap(p => [p.local, p.visitante]))]
+      teams.forEach(t => { equipos[t] = { nombre: t, flag: "", pj: 0, g: 0, e: 0, p: 0, gf: 0, gc: 0, pts: 0 } })
+      GRUPOS[g].forEach(partido => {
+        const loc = partido.local
+        const vis = partido.visitante
+        equipos[loc].flag = partido.flagLocal
+        equipos[vis].flag = partido.flagVisitante
+        const m = marc[partido.id]
+        if (m !== undefined && m.local !== "" && m.visitante !== "" && m.local !== undefined && m.visitante !== undefined) {
+          const gl = parseInt(m.local) || 0
+          const gv = parseInt(m.visitante) || 0
+          equipos[loc].pj++; equipos[vis].pj++
+          equipos[loc].gf += gl; equipos[loc].gc += gv
+          equipos[vis].gf += gv; equipos[vis].gc += gl
+          if (gl > gv) { equipos[loc].g++; equipos[loc].pts += 3; equipos[vis].p++ }
+          else if (gl < gv) { equipos[vis].g++; equipos[vis].pts += 3; equipos[loc].p++ }
+          else { equipos[loc].e++; equipos[vis].e++; equipos[loc].pts++; equipos[vis].pts++ }
+        }
+      })
+      standings[g] = Object.values(equipos).sort((a, b) => b.pts - a.pts || (b.gf - b.gc) - (a.gf - a.gc) || b.gf - a.gf)
+    })
+    setGruposData(standings)
   }
 
   const cargarPerfil = async () => {
@@ -243,10 +285,10 @@ export default function App() {
     setUsuariosAdmin(lista)
   }
 
-  const seleccionar = (partidoId, opcion) => {
+  const seleccionar = useCallback((partidoId, opcion) => {
     if (enviado || torneoFinalizado()) return
     setPronosticos(prev => ({ ...prev, [partidoId]: opcion }))
-  }
+  }, [enviado])
 
   const enviarPronosticos = async () => {
     const total = TODOS_PARTIDOS.length
@@ -268,7 +310,7 @@ export default function App() {
   }
 
   const limpiarMisPronosticos = async () => {
-    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos? Podrás volver a elegir.")) return
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos?")) return
     try {
       await deleteDoc(doc(db, "pronosticos", usuario.uid))
       setPronosticos({})
@@ -294,7 +336,9 @@ export default function App() {
   const guardarResultados = async () => {
     try {
       await setDoc(doc(db, "resultados", "oficial"), {
-        picks: resultados, fechaActualizacion: new Date().toISOString()
+        picks: resultados,
+        marcadores: marcadores,
+        fechaActualizacion: new Date().toISOString()
       })
       setMensaje("✅ Resultados guardados correctamente.")
     } catch (e) {
@@ -315,12 +359,14 @@ export default function App() {
     setTabla([])
     setModalUsuario(null)
     setPerfilData(null)
+    setGruposData({})
   }
 
   const cambiarTab = async (t) => {
     setTab(t)
     setMensaje("")
     if (t === "tabla") await cargarTabla()
+    if (t === "grupos") await cargarGrupos()
     if (t === "perfil") await cargarPerfil()
     if (t === "admin") { await cargarResultados(); await cargarUsuariosAdmin() }
   }
@@ -331,6 +377,25 @@ export default function App() {
     setDetalleData(resOficial)
     setModalUsuario(fila)
     setModalGrupo("A")
+  }
+
+  const cargarComparacion = async (uid) => {
+    if (!uid) {
+      setComparacionData(null)
+      setCompararConUID(null)
+      return
+    }
+    try {
+      const userSnap = await getDoc(doc(db, "usuarios", uid))
+      if (userSnap.exists()) {
+        const pron = userSnap.data().pronosticos || {}
+        setComparacionData(pron)
+        setCompararConUID(uid)
+      }
+    } catch (e) {
+      console.error("Error cargando comparación:", e)
+      setComparacionData(null)
+    }
   }
 
   const getLabelOpcion = (opcion, partido) => {
@@ -346,6 +411,20 @@ export default function App() {
     return d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }) + " · " + d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })
   }
 
+  const getEstadoPartido = (hora) => {
+    const inicio = new Date(hora)
+    const fin = new Date(inicio.getTime() + 110 * 60 * 1000)
+    const ahoraD = new Date()
+    if (ahoraD < inicio) return "proximo"
+    if (ahoraD >= inicio && ahoraD <= fin) return "envivo"
+    return "finalizado"
+  }
+
+  const formatHora = (hora) => {
+    const d = new Date(hora)
+    return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })
+  }
+
   const progreso = Object.keys(pronosticos).length
   const total = TODOS_PARTIDOS.length
 
@@ -359,37 +438,129 @@ export default function App() {
     return `${d}d ${h}h ${m}m ${s}s`
   }
 
-  const renderPartidos = (grupo, esAdmin = false) => (
-    GRUPOS[grupo].map(partido => (
-      <div key={partido.id} className={esAdmin ? "admin-card" : "partido-card"}>
-        <p className="partido-fecha">📅 {partido.fecha} · {partido.estadio}</p>
-        <div className="partido-equipos">
-          <div className="equipo">
-            <img src={`https://flagcdn.com/w80/${partido.flagLocal}.png`} alt={partido.local} style={{ width: "80px", borderRadius: "6px", boxShadow: "0 2px 8px #00000066" }} />
-            <span className="equipo-nombre">{partido.local}</span>
-          </div>
-          <span className="vs">VS</span>
-          <div className="equipo">
-            <img src={`https://flagcdn.com/w80/${partido.flagVisitante}.png`} alt={partido.visitante} style={{ width: "80px", borderRadius: "6px", boxShadow: "0 2px 8px #00000066" }} />
-            <span className="equipo-nombre">{partido.visitante}</span>
-          </div>
+  const renderEstado = (hora) => {
+    const estado = getEstadoPartido(hora)
+    if (estado === "proximo") return <span style={{ color: "#ffffff55", fontSize: "0.72rem", fontWeight: "700", letterSpacing: "1px" }}>PRÓXIMAMENTE</span>
+    if (estado === "envivo") return (
+      <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+        <span style={{ color: "#ff4444", fontSize: "0.72rem", fontWeight: "900", letterSpacing: "1px" }}>EN VIVO</span>
+        <span style={{ display: "inline-block", width: "50px", height: "3px", background: "#ff444422", borderRadius: "2px", overflow: "hidden", position: "relative" }}>
+          <span style={{ position: "absolute", width: "12px", height: "3px", background: "#ff4444", borderRadius: "2px", animation: "slide 1.2s linear infinite" }} />
+        </span>
+      </span>
+    )
+    return <span style={{ color: "#39ff6a88", fontSize: "0.72rem", fontWeight: "700", letterSpacing: "1px" }}>FINALIZADO</span>
+  }
+
+  const renderEstadoPronostico = (partido) => {
+    const estado = getEstadoPartido(partido.hora)
+    if (estado === "proximo") return <span style={{ color: "#ffffff55", fontSize: "0.72rem", fontWeight: "700", letterSpacing: "1px" }}>PRÓXIMAMENTE</span>
+    if (estado === "envivo") return (
+      <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+        <span style={{ color: "#ff4444", fontSize: "0.72rem", fontWeight: "900", letterSpacing: "1px" }}>EN VIVO</span>
+        <span style={{ display: "inline-block", width: "50px", height: "3px", background: "#ff444422", borderRadius: "2px", overflow: "hidden", position: "relative" }}>
+          <span style={{ position: "absolute", width: "12px", height: "3px", background: "#ff4444", borderRadius: "2px", animation: "slide 1.2s linear infinite" }} />
+        </span>
+      </span>
+    )
+
+    const pick = pronosticos[partido.id]
+    const oficial = resultados[partido.id]
+    if (!pick || !oficial) return (
+      <span className="estado-pronostico estado-finalizado">
+        <span className="estado-pronostico-full">FINALIZADO</span>
+        <span className="estado-pronostico-short">F</span>
+      </span>
+    )
+
+    const acertado = pick === oficial
+    return (
+      <span className={`estado-pronostico ${acertado ? "estado-ganada" : "estado-perdida"}`}>
+        <span className="estado-pronostico-full">{acertado ? "GANADA" : "PERDIDA"}</span>
+        <span className="estado-pronostico-short">{acertado ? "G" : "P"}</span>
+      </span>
+    )
+  }
+
+  const renderTablaGrupo = (g) => {
+    const data = gruposData[g]
+    if (!data) return null
+    return (
+      <div key={g} style={{ marginBottom: "40px" }}>
+        <p className="grupo-titulo">📊 Grupo {g}</p>
+        <div className="tabla-responsive">
+          <table className="tabla tabla-grupo">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>EQUIPO</th>
+                <th style={{ textAlign: "center" }}>PJ</th>
+                <th style={{ textAlign: "center" }}>G</th>
+                <th style={{ textAlign: "center" }}>E</th>
+                <th style={{ textAlign: "center" }}>P</th>
+                <th style={{ textAlign: "center" }}>GF</th>
+                <th style={{ textAlign: "center" }}>GC</th>
+                <th style={{ textAlign: "center" }}>DG</th>
+                <th style={{ textAlign: "center" }}>PTS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((equipo, i) => (
+                <tr key={equipo.nombre} style={{ borderLeft: i < 2 ? "3px solid #39ff6a" : i === 2 ? "3px solid #ffd700" : "3px solid transparent" }}>
+                  <td>{i + 1}</td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <img loading="lazy" src={`https://flagcdn.com/w20/${equipo.flag}.png`} alt="" style={{ borderRadius: "2px" }} />
+                      <span>{equipo.nombre}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: "center", color: "#ffffff88" }}>{equipo.pj}</td>
+                  <td style={{ textAlign: "center", color: "#39ff6a" }}>{equipo.g}</td>
+                  <td style={{ textAlign: "center", color: "#ffffff88" }}>{equipo.e}</td>
+                  <td style={{ textAlign: "center", color: "#ff6b6b" }}>{equipo.p}</td>
+                  <td style={{ textAlign: "center", color: "#ffffff88" }}>{equipo.gf}</td>
+                  <td style={{ textAlign: "center", color: "#ffffff88" }}>{equipo.gc}</td>
+                  <td style={{ textAlign: "center", color: equipo.gf - equipo.gc > 0 ? "#39ff6a" : equipo.gf - equipo.gc < 0 ? "#ff6b6b" : "#ffffff88" }}>
+                    {equipo.gf - equipo.gc > 0 ? "+" : ""}{equipo.gf - equipo.gc}
+                  </td>
+                  <td style={{ textAlign: "center" }}><span className="badge-puntos">{equipo.pts}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        {esAdmin ? (
-          <div className="resultado-opciones">
-            <button className={`btn-resultado ${resultados[partido.id] === "local" ? "sel" : ""}`} onClick={() => setResultados(p => ({ ...p, [partido.id]: "local" }))}>GANA {partido.local.toUpperCase()}</button>
-            <button className={`btn-resultado ${resultados[partido.id] === "empate" ? "sel" : ""}`} onClick={() => setResultados(p => ({ ...p, [partido.id]: "empate" }))}>EMPATE</button>
-            <button className={`btn-resultado ${resultados[partido.id] === "visitante" ? "sel" : ""}`} onClick={() => setResultados(p => ({ ...p, [partido.id]: "visitante" }))}>GANA {partido.visitante.toUpperCase()}</button>
-          </div>
-        ) : (
-          <div className="opciones">
-            <button className={`btn-opcion ${pronosticos[partido.id] === "local" ? "seleccionado" : ""} ${enviado || torneoFinalizado() ? "bloqueado" : ""}`} onClick={() => seleccionar(partido.id, "local")}>GANA {partido.local.toUpperCase()}</button>
-            <button className={`btn-opcion empate ${pronosticos[partido.id] === "empate" ? "empate-sel" : ""} ${enviado || torneoFinalizado() ? "bloqueado" : ""}`} onClick={() => seleccionar(partido.id, "empate")}>EMPATE</button>
-            <button className={`btn-opcion ${pronosticos[partido.id] === "visitante" ? "seleccionado" : ""} ${enviado || torneoFinalizado() ? "bloqueado" : ""}`} onClick={() => seleccionar(partido.id, "visitante")}>GANA {partido.visitante.toUpperCase()}</button>
-          </div>
-        )}
       </div>
-    ))
-  )
+    )
+  }
+
+  const renderPartidos = (grupo, esAdmin = false) => {
+    return GRUPOS[grupo].map(partido => {
+      const resultadoOficial = resultados[partido.id]
+      const pick = pronosticos[partido.id]
+      const esAcierto = !esAdmin && tab === "pronosticos" && pick && resultadoOficial && pick === resultadoOficial
+      const esFallo = !esAdmin && tab === "pronosticos" && pick && resultadoOficial && pick !== resultadoOficial
+      const cardClass = esAdmin ? "admin-card" : `partido-card${esAcierto ? " partido-acierto" : esFallo ? " partido-fallo" : ""}`
+
+      return (
+        <PartidoCard
+          key={partido.id}
+          partido={partido}
+          esAdmin={esAdmin}
+          resultados={resultados}
+          pronosticos={pronosticos}
+          marcadores={marcadores}
+          seleccionar={seleccionar}
+          setMarcadores={setMarcadores}
+          setResultados={setResultados}
+          enviado={enviado}
+          torneoFinalizado={torneoFinalizado}
+          tab={tab}
+          renderEstadoPronostico={renderEstadoPronostico}
+          renderEstado={renderEstado}
+        />
+      )
+    })
+  }
 
   const STYLES = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
@@ -399,8 +570,8 @@ export default function App() {
     .header-user { color: #ffffff88; font-size: 0.9rem; }
     .btn-logout { background: transparent; border: 1px solid #39ff6a66; color: #39ff6a; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; transition: all 0.3s; }
     .btn-logout:hover { background: #39ff6a22; box-shadow: 0 0 10px #39ff6a44; }
-    .tabs { position: fixed; top: 77px; left: 0; right: 0; z-index: 99; background: #1a2733; border-bottom: 1px solid #39ff6a22; display: flex; gap: 4px; padding: 0 40px; }
-    .tab { padding: 14px 24px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #ffffff55; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: all 0.25s; }
+    .tabs { position: fixed; top: 77px; left: 0; right: 0; z-index: 99; background: #1a2733; border-bottom: 1px solid #39ff6a22; display: flex; gap: 4px; padding: 0 40px; overflow-x: auto; }
+    .tab { padding: 14px 24px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #ffffff55; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
     .tab:hover { color: #ffffff99; }
     .tab.activo { color: #39ff6a; border-bottom-color: #39ff6a; }
     .tab.admin-tab { color: #ffd70088; }
@@ -416,7 +587,11 @@ export default function App() {
     .grupo-titulo { color: #39ff6a; font-size: 1rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 20px; text-transform: uppercase; }
     .partido-card { background: linear-gradient(145deg, #1e2d3d, #17212B); border: 1px solid #39ff6a22; border-radius: 14px; padding: 28px 40px 22px; margin-bottom: 16px; transition: box-shadow 0.3s; }
     .partido-card:hover { box-shadow: 0 0 20px #39ff6a18; }
-    .partido-fecha { color: #ffffff55; font-size: 0.78rem; text-align: center; margin-bottom: 16px; letter-spacing: 1px; }
+    .partido-card.partido-acierto { border-color: rgba(57, 255, 106, 0.5); box-shadow: 0 0 12px rgba(57, 255, 106, 0.08); }
+    .partido-card.partido-fallo { border-color: rgba(255, 107, 107, 0.5); box-shadow: 0 0 12px rgba(255, 107, 107, 0.08); }
+    .partido-top-row { display: flex; justify-content: center; align-items: flex-start; margin-bottom: 12px; position: relative; }
+    .partido-info { color: #ffffff55; font-size: 0.78rem; letter-spacing: 1px; text-align: center; max-width: calc(100% - 100px); word-break: break-word; }
+    .partido-estado-wrap { position: absolute; right: 0; top: 0; min-width: 80px; display: flex; justify-content: flex-end; }
     .partido-equipos { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 20px; }
     .equipo { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
     .equipo-nombre { color: white; font-weight: 700; font-size: 1.1rem; text-align: center; }
@@ -436,10 +611,25 @@ export default function App() {
     .progreso-fill { height: 100%; border-radius: 20px; background: #39ff6a; box-shadow: 0 0 8px #39ff6a88; transition: width 0.4s ease; }
     .progreso-texto { color: #ffffff55; font-size: 0.8rem; text-align: right; margin-bottom: 6px; }
     .contador-box { background: linear-gradient(145deg, #1e2d3d, #17212B); border: 1px solid #39ff6a22; border-radius: 12px; padding: 16px 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
-    .tabla { width: 100%; border-collapse: collapse; }
+    .tabla-responsive { overflow-x: auto; width: 100%; }
+    .tabla { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    .tabla-grupo { table-layout: fixed; min-width: 620px; }
+    .tabla-grupo th:nth-child(1), .tabla-grupo td:nth-child(1) { width: 42px; text-align: center; }
+    .tabla-grupo th:nth-child(2), .tabla-grupo td:nth-child(2) { width: 220px; }
+    .tabla-grupo th:nth-child(n+3), .tabla-grupo td:nth-child(n+3) { width: 56px; }
     .tabla th { color: #39ff6a; font-size: 0.8rem; letter-spacing: 2px; padding: 12px 16px; text-align: left; border-bottom: 1px solid #39ff6a33; }
     .tabla td { padding: 14px 16px; border-bottom: 1px solid #ffffff11; color: white; font-size: 0.95rem; }
     .tabla tr:hover td { background: #39ff6a0a; }
+    .estado-pronostico { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; }
+    .estado-pronostico-full { display: inline; }
+    .estado-pronostico-short { display: none; }
+    .estado-ganada { color: #39ff6a; }
+    .estado-perdida { color: #ff6b6b; }
+    .estado-finalizado { color: #39ff6a88; }
+    @media (max-width: 768px) {
+      .estado-pronostico-full { display: none; }
+      .estado-pronostico-short { display: inline; }
+    }
     .posicion-1 td { color: #ffd700; }
     .posicion-2 td { color: #c0c0c0; }
     .posicion-3 td { color: #cd7f32; }
@@ -485,6 +675,48 @@ export default function App() {
     .btn-borrar:hover { background: #ff6b6b22; box-shadow: 0 0 8px #ff6b6b44; }
     .msg-enviado { color: #39ff6a; text-align: center; margin-top: 20px; font-weight: 700; font-size: 0.95rem; }
     .msg-warning { color: #ffd700; text-align: center; margin-top: 16px; font-size: 0.88rem; }
+    @keyframes slide { 0% { left: -12px; } 100% { left: 40px; } }
+    @media (max-width: 768px) {
+      .header { padding: 12px 16px; }
+      .header-titulo { font-size: 0.85rem; letter-spacing: 0.5px; }
+      .header-user { display: none; }
+      .btn-logout { padding: 6px 10px; font-size: 0.7rem; }
+      .tabs { padding: 0 4px; top: 62px; }
+      .tab { padding: 10px 10px; font-size: 0.7rem; letter-spacing: 0; }
+      .grupos-tabs { top: 106px; padding: 0 4px; justify-content: flex-start; }
+      .grupo-tab { padding: 8px 10px; font-size: 0.7rem; letter-spacing: 0; }
+      .partido-card { padding: 14px 10px; }
+      .admin-card { padding: 14px 10px; }
+      .partido-top-row { flex-direction: column; align-items: center; position: static; gap: 8px; }
+      .partido-info { max-width: 100%; }
+      .partido-estado-wrap { position: static; width: auto; justify-content: center; }
+      .partido-equipos { gap: 6px; }
+      .equipo-nombre { font-size: 0.78rem; }
+      .btn-opcion { font-size: 0.65rem; padding: 7px 3px; max-width: 100%; letter-spacing: 0; }
+      .btn-resultado { font-size: 0.65rem; padding: 7px 3px; max-width: 100%; letter-spacing: 0; }
+      .tabla-responsive { overflow-x: auto; }
+      .tabla-grupo { min-width: 560px; }
+      .tabla-grupo th:nth-child(2), .tabla-grupo td:nth-child(2) { width: 140px; }
+      .tabla-grupo th:nth-child(n+3), .tabla-grupo td:nth-child(n+3) { width: 42px; }
+      .contador-box { flex-direction: column; gap: 8px; text-align: center; padding: 12px; }
+      .perfil-card { padding: 20px 12px; }
+      .perfil-nombre { font-size: 1.3rem; }
+      .perfil-stats { gap: 8px; }
+      .stat-card { padding: 10px 6px; }
+      .stat-valor { font-size: 1.4rem; }
+      .stat-label { font-size: 0.62rem; }
+      .perfil-estado { flex-direction: column; gap: 12px; text-align: center; }
+      .tabla th { font-size: 0.65rem; padding: 8px 5px; letter-spacing: 0; }
+      .tabla td { font-size: 0.78rem; padding: 8px 5px; }
+      .modal { max-height: 92vh; }
+      .modal-body { padding: 10px 12px; }
+      .modal-header { padding: 12px 14px; }
+      .modal-grupos { padding: 0 8px; }
+      .btn-enviar { padding: 13px 24px; font-size: 0.85rem; }
+      .btn-guardar { padding: 13px 24px; font-size: 0.85rem; }
+      .usuarios-tabla th { font-size: 0.65rem; padding: 7px 5px; }
+      .usuarios-tabla td { font-size: 0.75rem; padding: 7px 5px; }
+    }
   `
 
   if (!usuario) return (
@@ -535,7 +767,9 @@ export default function App() {
 
         <div className="tabs">
           {!isAdmin && <button className={`tab ${tab === "pronosticos" ? "activo" : ""}`} onClick={() => cambiarTab("pronosticos")}>📋 MIS PRONÓSTICOS</button>}
-          <button className={`tab ${tab === "tabla" ? "activo" : ""}`} onClick={() => cambiarTab("tabla")}>🏆 TABLA DE POSICIONES</button>
+          <button className={`tab ${tab === "grupos" ? "activo" : ""}`} onClick={() => cambiarTab("grupos")}>📊 GRUPOS</button>
+          
+          <button className={`tab ${tab === "tabla" ? "activo" : ""}`} onClick={() => cambiarTab("tabla")}>🏆 TABLA</button>
           {!isAdmin && <button className={`tab ${tab === "perfil" ? "activo" : ""}`} onClick={() => cambiarTab("perfil")}>👤 MI PERFIL</button>}
           {isAdmin && <button className={`tab admin-tab ${tab === "admin" ? "activo" : ""}`} onClick={() => cambiarTab("admin")}>⚙️ ADMIN</button>}
         </div>
@@ -551,7 +785,7 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ width: "100%", maxWidth: "1200px", margin: "0 auto", padding: "40px 20px", marginTop: tab === "tabla" || tab === "perfil" ? "120px" : "170px", flex: 1 }}>
+        <div style={{ width: "100%", maxWidth: "1200px", margin: "0 auto", padding: "30px 16px", marginTop: tab === "pronosticos" || tab === "admin" ? "170px" : "120px", flex: 1 }}>
 
           {tab === "pronosticos" && (
             <>
@@ -578,6 +812,24 @@ export default function App() {
               )}
             </>
           )}
+
+          {tab === "grupos" && (
+            <>
+              <div style={{ marginBottom: "20px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "12px", height: "12px", borderRadius: "2px", background: "#39ff6a" }} />
+                  <span style={{ color: "#ffffff55", fontSize: "0.78rem" }}>Clasifican directo</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "12px", height: "12px", borderRadius: "2px", background: "#ffd700" }} />
+                  <span style={{ color: "#ffffff55", fontSize: "0.78rem" }}>Posible clasificado (mejor 3ro)</span>
+                </div>
+              </div>
+              {Object.keys(GRUPOS).map(g => renderTablaGrupo(g))}
+            </>
+          )}
+
+          
 
           {tab === "tabla" && (
             <>
@@ -654,6 +906,51 @@ export default function App() {
                   </p>
                 )}
               </div>
+
+              {tabla.length > 1 && (
+                <>
+                  <p className="grupo-titulo" style={{ marginTop: "40px" }}>🔥 Mis Pronósticos</p>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="tabla" style={{ minWidth: "800px" }}>
+                      <thead>
+                        <tr>
+                          <th>FECHA</th>
+                          <th>PARTIDO</th>
+                          <th style={{ textAlign: "center" }}>MI PRONÓSTICO</th>
+                          <th style={{ textAlign: "center" }}>RESULTADO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedPartidos.map(partido => {
+                          const tuPron = pronosticos[partido.id]
+                          const oficial = resultados[partido.id]
+                          const tuAcierto = tuPron && oficial && tuPron === oficial
+                          return (
+                            <tr key={partido.id}>
+                              <td style={{ color: "#ffffff66", fontSize: "0.85rem", minWidth: "90px" }}>{partido.fecha}</td>
+                              <td style={{ minWidth: "250px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <img loading="lazy" src={`https://flagcdn.com/w20/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "2px" }} />
+                                  <span style={{ fontSize: "0.85rem", color: "#ffffff88" }}>{partido.local}</span>
+                                  <span style={{ fontSize: "0.75rem", color: "#ffffff44" }}>vs</span>
+                                  <span style={{ fontSize: "0.85rem", color: "#ffffff88" }}>{partido.visitante}</span>
+                                  <img loading="lazy" src={`https://flagcdn.com/w20/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "2px" }} />
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center", color: tuPron ? "#39ff6a" : "#ffffff33", fontWeight: "600" }}>
+                                {tuPron ? (tuPron === "empate" ? "EMPATE" : `GANA ${tuPron === "local" ? partido.local.toUpperCase() : partido.visitante.toUpperCase()}`) : "—"}
+                              </td>
+                              <td style={{ textAlign: "center", fontWeight: "700" }}>
+                                {!tuPron ? "—" : !oficial ? "⏳" : tuAcierto ? <span style={{ color: "#39ff6a" }}>✅</span> : <span style={{ color: "#ff6b6b" }}>❌</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -721,9 +1018,9 @@ export default function App() {
                   return (
                     <div key={partido.id} className="modal-partido">
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
-                        <img src={`https://flagcdn.com/w20/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "2px" }} />
+                        <img loading="lazy" src={`https://flagcdn.com/w20/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "2px" }} />
                         <span className="modal-partido-nombre">{partido.local} vs {partido.visitante}</span>
-                        <img src={`https://flagcdn.com/w20/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "2px" }} />
+                        <img loading="lazy" src={`https://flagcdn.com/w20/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "2px" }} />
                       </div>
                       <span className="modal-partido-pick" style={{ color: pick ? "white" : "#ffffff33" }}>{pick ? getLabelOpcion(pick, partido) : "Sin pronóstico"}</span>
                       <span className="modal-partido-resultado">{!pick ? "—" : !oficial ? "⏳" : acerto ? "✅" : "❌"}</span>
