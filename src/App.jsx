@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import PartidoCard from "./components/PartidoCard"
+import TickerBar from "./components/TickerBar"
 import { auth, db } from "./firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "firebase/firestore"
@@ -14,96 +15,96 @@ const GRUPOS = {
     { id: "A2", local: "Corea del Sur", visitante: "Chequia", fecha: "11 jun 2026", hora: "2026-06-11T14:00:00", estadio: "Estadio Guadalajara", flagLocal: "kr", flagVisitante: "cz" },
     { id: "A3", local: "México", visitante: "Corea del Sur", fecha: "18 jun 2026", hora: "2026-06-18T22:00:00", estadio: "Estadio Guadalajara", flagLocal: "mx", flagVisitante: "kr" },
     { id: "A4", local: "Chequia", visitante: "Sudáfrica", fecha: "18 jun 2026", hora: "2026-06-18T11:00:00", estadio: "Estadio Atlanta", flagLocal: "cz", flagVisitante: "za" },
-    { id: "A5", local: "Chequia", visitante: "México", fecha: "22 jun 2026", hora: "2026-06-22T23:00:00", estadio: "Estadio Ciudad de México", flagLocal: "cz", flagVisitante: "mx" },
-    { id: "A6", local: "Sudáfrica", visitante: "Corea del Sur", fecha: "22 jun 2026", hora: "2026-06-22T23:00:00", estadio: "Estadio Guadalajara", flagLocal: "za", flagVisitante: "kr" },
+    { id: "A5", local: "Chequia", visitante: "México", fecha: "24 jun 2026", hora: "2026-06-24T20:00:00", estadio: "Estadio Ciudad de México", flagLocal: "cz", flagVisitante: "mx" },
+    { id: "A6", local: "Sudáfrica", visitante: "Corea del Sur", fecha: "24 jun 2026", hora: "2026-06-24T20:00:00", estadio: "Estadio Monterrey", flagLocal: "za", flagVisitante: "kr" },
   ],
   B: [
     { id: "B1", local: "Canadá", visitante: "Bosnia", fecha: "12 jun 2026", hora: "2026-06-12T11:00:00", estadio: "Estadio Toronto", flagLocal: "ca", flagVisitante: "ba" },
     { id: "B2", local: "Catar", visitante: "Suiza", fecha: "12 jun 2026", hora: "2026-06-12T11:00:00", estadio: "Estadio Nueva York", flagLocal: "qa", flagVisitante: "ch" },
     { id: "B3", local: "Canadá", visitante: "Catar", fecha: "18 jun 2026", hora: "2026-06-18T17:00:00", estadio: "Estadio Toronto", flagLocal: "ca", flagVisitante: "qa" },
     { id: "B4", local: "Suiza", visitante: "Bosnia", fecha: "18 jun 2026", hora: "2026-06-18T14:00:00", estadio: "Estadio Nueva York", flagLocal: "ch", flagVisitante: "ba" },
-    { id: "B5", local: "Suiza", visitante: "Canadá", fecha: "22 jun 2026", hora: "2026-06-22T14:00:00", estadio: "Estadio Vancouver", flagLocal: "ch", flagVisitante: "ca" },
-    { id: "B6", local: "Bosnia", visitante: "Catar", fecha: "22 jun 2026", hora: "2026-06-22T14:00:00", estadio: "Estadio Toronto", flagLocal: "ba", flagVisitante: "qa" },
+    { id: "B5", local: "Suiza", visitante: "Canadá", fecha: "24 jun 2026", hora: "2026-06-24T14:00:00", estadio: "Estadio Vancouver", flagLocal: "ch", flagVisitante: "ca" },
+    { id: "B6", local: "Bosnia", visitante: "Catar", fecha: "24 jun 2026", hora: "2026-06-24T14:00:00", estadio: "Estadio Seattle", flagLocal: "ba", flagVisitante: "qa" },
   ],
   C: [
     { id: "C1", local: "Brasil", visitante: "Marruecos", fecha: "13 jun 2026", hora: "2026-06-13T14:00:00", estadio: "Estadio Los Ángeles", flagLocal: "br", flagVisitante: "ma" },
     { id: "C2", local: "Haití", visitante: "Escocia", fecha: "13 jun 2026", hora: "2026-06-13T11:00:00", estadio: "Estadio San Francisco", flagLocal: "ht", flagVisitante: "gb-sct" },
     { id: "C3", local: "Brasil", visitante: "Haití", fecha: "19 jun 2026", hora: "2026-06-19T20:30:00", estadio: "Estadio Los Ángeles", flagLocal: "br", flagVisitante: "ht" },
     { id: "C4", local: "Escocia", visitante: "Marruecos", fecha: "19 jun 2026", hora: "2026-06-19T17:00:00", estadio: "Estadio Boston", flagLocal: "gb-sct", flagVisitante: "ma" },
-    { id: "C5", local: "Escocia", visitante: "Brasil", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio Miami", flagLocal: "gb-sct", flagVisitante: "br" },
-    { id: "C6", local: "Marruecos", visitante: "Haití", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio Atlanta", flagLocal: "ma", flagVisitante: "ht" },
+    { id: "C5", local: "Escocia", visitante: "Brasil", fecha: "24 jun 2026", hora: "2026-06-24T17:00:00", estadio: "Estadio Miami", flagLocal: "gb-sct", flagVisitante: "br" },
+    { id: "C6", local: "Marruecos", visitante: "Haití", fecha: "24 jun 2026", hora: "2026-06-24T17:00:00", estadio: "Estadio Atlanta", flagLocal: "ma", flagVisitante: "ht" },
   ],
   D: [
     { id: "D1", local: "Australia", visitante: "Turquía", fecha: "12 jun 2026", hora: "2026-06-12T14:00:00", estadio: "Estadio Vancouver", flagLocal: "au", flagVisitante: "tr" },
     { id: "D2", local: "USA", visitante: "Paraguay", fecha: "12 jun 2026", hora: "2026-06-12T11:00:00", estadio: "Estadio Los Ángeles", flagLocal: "us", flagVisitante: "py" },
     { id: "D3", local: "USA", visitante: "Australia", fecha: "19 jun 2026", hora: "2026-06-19T14:00:00", estadio: "Estadio Seattle", flagLocal: "us", flagVisitante: "au" },
     { id: "D4", local: "Turquía", visitante: "Paraguay", fecha: "19 jun 2026", hora: "2026-06-19T11:00:00", estadio: "Estadio Dallas", flagLocal: "tr", flagVisitante: "py" },
-    { id: "D5", local: "Turquía", visitante: "USA", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio Los Ángeles", flagLocal: "tr", flagVisitante: "us" },
-    { id: "D6", local: "Paraguay", visitante: "Australia", fecha: "23 jun 2026", hora: "2026-06-23T23:00:00", estadio: "Estadio San Francisco", flagLocal: "py", flagVisitante: "au" },
+    { id: "D5", local: "Turquía", visitante: "USA", fecha: "25 jun 2026", hora: "2026-06-25T21:00:00", estadio: "Estadio Los Ángeles", flagLocal: "tr", flagVisitante: "us" },
+    { id: "D6", local: "Paraguay", visitante: "Australia", fecha: "25 jun 2026", hora: "2026-06-25T21:00:00", estadio: "Estadio San Francisco", flagLocal: "py", flagVisitante: "au" },
   ],
   E: [
     { id: "E1", local: "Alemania", visitante: "Curaçao", fecha: "13 jun 2026", hora: "2026-06-13T14:00:00", estadio: "Estadio Houston", flagLocal: "de", flagVisitante: "cw" },
     { id: "E2", local: "Costa de Marfil", visitante: "Ecuador", fecha: "14 jun 2026", hora: "2026-06-14T18:00:00", estadio: "Estadio Filadelfia", flagLocal: "ci", flagVisitante: "ec" },
     { id: "E3", local: "Alemania", visitante: "Costa de Marfil", fecha: "20 jun 2026", hora: "2026-06-20T15:00:00", estadio: "Estadio Toronto", flagLocal: "de", flagVisitante: "ci" },
     { id: "E4", local: "Ecuador", visitante: "Curaçao", fecha: "20 jun 2026", hora: "2026-06-20T19:00:00", estadio: "Estadio Kansas City", flagLocal: "ec", flagVisitante: "cw" },
-    { id: "E5", local: "Ecuador", visitante: "Alemania", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Nueva Jersey", flagLocal: "ec", flagVisitante: "de" },
-    { id: "E6", local: "Curaçao", visitante: "Costa de Marfil", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Filadelfia", flagLocal: "cw", flagVisitante: "ci" },
+    { id: "E5", local: "Ecuador", visitante: "Alemania", fecha: "25 jun 2026", hora: "2026-06-25T15:00:00", estadio: "Estadio Nueva Jersey", flagLocal: "ec", flagVisitante: "de" },
+    { id: "E6", local: "Curaçao", visitante: "Costa de Marfil", fecha: "25 jun 2026", hora: "2026-06-25T15:00:00", estadio: "Estadio Filadelfia", flagLocal: "cw", flagVisitante: "ci" },
   ],
   F: [
     { id: "F1", local: "Países Bajos", visitante: "Japón", fecha: "14 jun 2026", hora: "2026-06-14T15:00:00", estadio: "Estadio Arlington", flagLocal: "nl", flagVisitante: "jp" },
     { id: "F2", local: "Suecia", visitante: "Túnez", fecha: "14 jun 2026", hora: "2026-06-14T21:00:00", estadio: "Estadio Monterrey", flagLocal: "se", flagVisitante: "tn" },
     { id: "F3", local: "Países Bajos", visitante: "Suecia", fecha: "20 jun 2026", hora: "2026-06-20T12:00:00", estadio: "Estadio Houston", flagLocal: "nl", flagVisitante: "se" },
     { id: "F4", local: "Túnez", visitante: "Japón", fecha: "20 jun 2026", hora: "2026-06-20T23:00:00", estadio: "Estadio Kansas City", flagLocal: "tn", flagVisitante: "jp" },
-    { id: "F5", local: "Túnez", visitante: "Países Bajos", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Kansas City", flagLocal: "tn", flagVisitante: "nl" },
-    { id: "F6", local: "Japón", visitante: "Suecia", fecha: "24 jun 2026", hora: "2026-06-24T23:00:00", estadio: "Estadio Arlington", flagLocal: "jp", flagVisitante: "se" },
+    { id: "F5", local: "Túnez", visitante: "Países Bajos", fecha: "25 jun 2026", hora: "2026-06-25T18:00:00", estadio: "Estadio Kansas City", flagLocal: "tn", flagVisitante: "nl" },
+    { id: "F6", local: "Japón", visitante: "Suecia", fecha: "25 jun 2026", hora: "2026-06-25T18:00:00", estadio: "Estadio Arlington", flagLocal: "jp", flagVisitante: "se" },
   ],
   G: [
     { id: "G1", local: "Bélgica", visitante: "Egipto", fecha: "15 jun 2026", hora: "2026-06-15T14:00:00", estadio: "Estadio Atlanta", flagLocal: "be", flagVisitante: "eg" },
     { id: "G2", local: "Irán", visitante: "Nueva Zelanda", fecha: "15 jun 2026", hora: "2026-06-15T20:00:00", estadio: "Estadio Miami", flagLocal: "ir", flagVisitante: "nz" },
     { id: "G3", local: "Bélgica", visitante: "Irán", fecha: "21 jun 2026", hora: "2026-06-21T14:00:00", estadio: "Estadio Los Ángeles", flagLocal: "be", flagVisitante: "ir" },
     { id: "G4", local: "Nueva Zelanda", visitante: "Egipto", fecha: "21 jun 2026", hora: "2026-06-21T20:00:00", estadio: "Estadio Vancouver", flagLocal: "nz", flagVisitante: "eg" },
-    { id: "G5", local: "Nueva Zelanda", visitante: "Bélgica", fecha: "25 jun 2026", hora: "2026-06-25T20:00:00", estadio: "Estadio Miami", flagLocal: "nz", flagVisitante: "be" },
-    { id: "G6", local: "Egipto", visitante: "Irán", fecha: "25 jun 2026", hora: "2026-06-25T20:00:00", estadio: "Estadio Atlanta", flagLocal: "eg", flagVisitante: "ir" },
+    { id: "G5", local: "Nueva Zelanda", visitante: "Bélgica", fecha: "26 jun 2026", hora: "2026-06-26T22:00:00", estadio: "Estadio Miami", flagLocal: "nz", flagVisitante: "be" },
+    { id: "G6", local: "Egipto", visitante: "Irán", fecha: "26 jun 2026", hora: "2026-06-26T22:00:00", estadio: "Estadio Atlanta", flagLocal: "eg", flagVisitante: "ir" },
   ],
   H: [
     { id: "H1", local: "España", visitante: "Cabo Verde", fecha: "15 jun 2026", hora: "2026-06-15T11:00:00", estadio: "Estadio Atlanta", flagLocal: "es", flagVisitante: "cv" },
     { id: "H2", local: "Arabia Saudí", visitante: "Uruguay", fecha: "15 jun 2026", hora: "2026-06-15T17:00:00", estadio: "Estadio Dallas", flagLocal: "sa", flagVisitante: "uy" },
     { id: "H3", local: "España", visitante: "Arabia Saudí", fecha: "21 jun 2026", hora: "2026-06-21T11:00:00", estadio: "Estadio Atlanta", flagLocal: "es", flagVisitante: "sa" },
     { id: "H4", local: "Uruguay", visitante: "Cabo Verde", fecha: "21 jun 2026", hora: "2026-06-21T17:00:00", estadio: "Estadio Miami", flagLocal: "uy", flagVisitante: "cv" },
-    { id: "H5", local: "Uruguay", visitante: "España", fecha: "25 jun 2026", hora: "2026-06-25T14:00:00", estadio: "Estadio Dallas", flagLocal: "uy", flagVisitante: "es" },
-    { id: "H6", local: "Cabo Verde", visitante: "Arabia Saudí", fecha: "25 jun 2026", hora: "2026-06-25T14:00:00", estadio: "Estadio Houston", flagLocal: "cv", flagVisitante: "sa" },
+    { id: "H5", local: "Uruguay", visitante: "España", fecha: "26 jun 2026", hora: "2026-06-26T19:00:00", estadio: "Estadio Dallas", flagLocal: "uy", flagVisitante: "es" },
+    { id: "H6", local: "Cabo Verde", visitante: "Arabia Saudí", fecha: "26 jun 2026", hora: "2026-06-26T19:00:00", estadio: "Estadio Houston", flagLocal: "cv", flagVisitante: "sa" },
   ],
   I: [
     { id: "I1", local: "Francia", visitante: "Senegal", fecha: "16 jun 2026", hora: "2026-06-16T14:00:00", estadio: "Estadio Nueva York", flagLocal: "fr", flagVisitante: "sn" },
     { id: "I2", local: "Irak", visitante: "Noruega", fecha: "16 jun 2026", hora: "2026-06-16T17:00:00", estadio: "Estadio Boston", flagLocal: "iq", flagVisitante: "no" },
     { id: "I3", local: "Francia", visitante: "Irak", fecha: "22 jun 2026", hora: "2026-06-22T16:00:00", estadio: "Estadio Filadelfia", flagLocal: "fr", flagVisitante: "iq" },
     { id: "I4", local: "Noruega", visitante: "Senegal", fecha: "22 jun 2026", hora: "2026-06-22T19:00:00", estadio: "Estadio Nueva York", flagLocal: "no", flagVisitante: "sn" },
-    { id: "I5", local: "Noruega", visitante: "Francia", fecha: "26 jun 2026", hora: "2026-06-26T19:00:00", estadio: "Estadio Boston", flagLocal: "no", flagVisitante: "fr" },
-    { id: "I6", local: "Senegal", visitante: "Irak", fecha: "26 jun 2026", hora: "2026-06-26T19:00:00", estadio: "Estadio Nueva York", flagLocal: "sn", flagVisitante: "iq" },
+    { id: "I5", local: "Noruega", visitante: "Francia", fecha: "26 jun 2026", hora: "2026-06-26T14:00:00", estadio: "Estadio Boston", flagLocal: "no", flagVisitante: "fr" },
+    { id: "I6", local: "Senegal", visitante: "Irak", fecha: "26 jun 2026", hora: "2026-06-26T14:00:00", estadio: "Estadio Nueva York", flagLocal: "sn", flagVisitante: "iq" },
   ],
   J: [
     { id: "J1", local: "Argentina", visitante: "Argelia", fecha: "16 jun 2026", hora: "2026-06-16T20:00:00", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "dz" },
     { id: "J2", local: "Austria", visitante: "Jordania", fecha: "16 jun 2026", hora: "2026-06-16T23:00:00", estadio: "Estadio San Francisco", flagLocal: "at", flagVisitante: "jo" },
     { id: "J3", local: "Argentina", visitante: "Austria", fecha: "22 jun 2026", hora: "2026-06-22T12:00:00", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "at" },
     { id: "J4", local: "Jordania", visitante: "Argelia", fecha: "22 jun 2026", hora: "2026-06-22T16:00:00", estadio: "Estadio Miami", flagLocal: "jo", flagVisitante: "dz" },
-    { id: "J5", local: "Jordania", visitante: "Argentina", fecha: "26 jun 2026", hora: "2026-06-26T23:30:00", estadio: "Estadio Arlington", flagLocal: "jo", flagVisitante: "ar" },
-    { id: "J6", local: "Argelia", visitante: "Austria", fecha: "26 jun 2026", hora: "2026-06-26T23:30:00", estadio: "Estadio Kansas City", flagLocal: "dz", flagVisitante: "at" },
+    { id: "J5", local: "Jordania", visitante: "Argentina", fecha: "27 jun 2026", hora: "2026-06-27T21:00:00", estadio: "Estadio Arlington", flagLocal: "jo", flagVisitante: "ar" },
+    { id: "J6", local: "Argelia", visitante: "Austria", fecha: "27 jun 2026", hora: "2026-06-27T21:00:00", estadio: "Estadio Kansas City", flagLocal: "dz", flagVisitante: "at" },
   ],
   K: [
     { id: "K1", local: "Portugal", visitante: "DR Congo", fecha: "17 jun 2026", hora: "2026-06-17T12:00:00", estadio: "Estadio Houston", flagLocal: "pt", flagVisitante: "cd" },
     { id: "K2", local: "Uzbekistán", visitante: "Colombia", fecha: "17 jun 2026", hora: "2026-06-17T21:00:00", estadio: "Estadio Ciudad de México", flagLocal: "uz", flagVisitante: "co" },
     { id: "K3", local: "Portugal", visitante: "Uzbekistán", fecha: "23 jun 2026", hora: "2026-06-23T12:00:00", estadio: "Estadio Houston", flagLocal: "pt", flagVisitante: "uz" },
     { id: "K4", local: "Colombia", visitante: "DR Congo", fecha: "23 jun 2026", hora: "2026-06-23T21:00:00", estadio: "Estadio Seattle", flagLocal: "co", flagVisitante: "cd" },
-    { id: "K5", local: "Colombia", visitante: "Portugal", fecha: "27 jun 2026", hora: "2026-06-27T23:30:00", estadio: "Estadio Miami", flagLocal: "co", flagVisitante: "pt" },
-    { id: "K6", local: "DR Congo", visitante: "Uzbekistán", fecha: "27 jun 2026", hora: "2026-06-27T23:30:00", estadio: "Estadio Atlanta", flagLocal: "cd", flagVisitante: "uz" },
+    { id: "K5", local: "Colombia", visitante: "Portugal", fecha: "27 jun 2026", hora: "2026-06-27T18:30:00", estadio: "Estadio Miami", flagLocal: "co", flagVisitante: "pt" },
+    { id: "K6", local: "DR Congo", visitante: "Uzbekistán", fecha: "27 jun 2026", hora: "2026-06-27T18:30:00", estadio: "Estadio Atlanta", flagLocal: "cd", flagVisitante: "uz" },
   ],
   L: [
     { id: "L1", local: "Inglaterra", visitante: "Croacia", fecha: "17 jun 2026", hora: "2026-06-17T15:00:00", estadio: "Estadio Arlington", flagLocal: "gb-eng", flagVisitante: "hr" },
     { id: "L2", local: "Ghana", visitante: "Panamá", fecha: "17 jun 2026", hora: "2026-06-17T18:00:00", estadio: "Estadio Toronto", flagLocal: "gh", flagVisitante: "pa" },
     { id: "L3", local: "Inglaterra", visitante: "Ghana", fecha: "23 jun 2026", hora: "2026-06-23T15:00:00", estadio: "Estadio Boston", flagLocal: "gb-eng", flagVisitante: "gh" },
     { id: "L4", local: "Panamá", visitante: "Croacia", fecha: "23 jun 2026", hora: "2026-06-23T18:00:00", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "hr" },
-    { id: "L5", local: "Panamá", visitante: "Inglaterra", fecha: "27 jun 2026", hora: "2026-06-27T20:00:00", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "gb-eng" },
-    { id: "L6", local: "Croacia", visitante: "Ghana", fecha: "27 jun 2026", hora: "2026-06-27T20:00:00", estadio: "Estadio Chicago", flagLocal: "hr", flagVisitante: "gh" },
+    { id: "L5", local: "Panamá", visitante: "Inglaterra", fecha: "27 jun 2026", hora: "2026-06-27T16:00:00", estadio: "Estadio Monterrey", flagLocal: "pa", flagVisitante: "gb-eng" },
+    { id: "L6", local: "Croacia", visitante: "Ghana", fecha: "27 jun 2026", hora: "2026-06-27T16:00:00", estadio: "Estadio Chicago", flagLocal: "hr", flagVisitante: "gh" },
   ],
 }
 
@@ -564,20 +565,39 @@ export default function App() {
 
   const STYLES = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+    :root { --ticker-h: 42px; }
     * { font-family: 'Inter', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
-    .header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: linear-gradient(90deg, #1e2d3d, #17212B); border-bottom: 1px solid #39ff6a33; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; }
+    .ticker-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 101; height: var(--ticker-h); background: linear-gradient(90deg, #00754A 0%, #006847 12%, #B31942 28%, #0A3161 50%, #002868 60%, #D52B1E 78%, #C8102E 92%, #00754A 100%); border-bottom: 1px solid #39ff6a33; overflow: hidden; white-space: nowrap; display: flex; align-items: center; }
+    .ticker-track { display: inline-flex; animation: ticker-scroll 35s linear infinite; will-change: transform; }
+    .ticker-bar:hover .ticker-track { animation-play-state: paused; }
+    .ticker-content { display: inline-flex; align-items: center; flex-shrink: 0; }
+    .ticker-item { display: inline-flex; align-items: center; gap: 10px; padding: 0 28px; border-right: 1px solid #ffffff14; flex-shrink: 0; text-transform: uppercase; }
+    .ticker-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; white-space: nowrap; }
+    .ticker-badge-final { background: #39ff6a1a; border: 1px solid #39ff6a55; color: #39ff6a; }
+    .ticker-badge-vivo { background: #ff44441a; border: 1px solid #ff444466; color: #ff4444; }
+    .ticker-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff4444; animation: ticker-pulse 1.2s ease-in-out infinite; }
+    .ticker-badge-hora { background: #ffd70022; border: 1px solid #ffd70066; color: #FFD700; }
+    .ticker-flag { width: 24px; border-radius: 2px; }
+    .ticker-equipo { color: white; font-weight: 700; font-size: 1rem; letter-spacing: 0.3px; }
+    .ticker-vs { color: #ffffff44; font-size: 0.9rem; font-weight: 800; }
+    .ticker-marcador { color: #FFD700; font-weight: 900; font-size: 1.05rem; letter-spacing: 1px; }
+    .ticker-grupo { color: #f0f0f0; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
+    .ticker-vacio { width: 100%; text-align: center; color: #ffffff44; font-size: 0.95rem; font-weight: 600; letter-spacing: 0.5px; }
+    @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    @keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .header { position: fixed; top: var(--ticker-h); left: 0; right: 0; z-index: 100; background: linear-gradient(90deg, #1e2d3d, #17212B); border-bottom: 1px solid #39ff6a33; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; }
     .header-titulo { color: #39ff6a; font-weight: 900; font-size: 1.2rem; letter-spacing: 1.5px; text-shadow: 0 0 10px #39ff6a66; }
     .header-user { color: #ffffff88; font-size: 0.9rem; }
     .btn-logout { background: transparent; border: 1px solid #39ff6a66; color: #39ff6a; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; transition: all 0.3s; }
     .btn-logout:hover { background: #39ff6a22; box-shadow: 0 0 10px #39ff6a44; }
-    .tabs { position: fixed; top: 77px; left: 0; right: 0; z-index: 99; background: #1a2733; border-bottom: 1px solid #39ff6a22; display: flex; gap: 4px; padding: 0 40px; overflow-x: auto; }
+    .tabs { position: fixed; top: calc(77px + var(--ticker-h)); left: 0; right: 0; z-index: 99; background: #1a2733; border-bottom: 1px solid #39ff6a22; display: flex; gap: 4px; padding: 0 40px; overflow-x: auto; }
     .tab { padding: 14px 24px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #ffffff55; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
     .tab:hover { color: #ffffff99; }
     .tab.activo { color: #39ff6a; border-bottom-color: #39ff6a; }
     .tab.admin-tab { color: #ffd70088; }
     .tab.admin-tab:hover { color: #ffd700; }
     .tab.admin-tab.activo { color: #ffd700; border-bottom-color: #ffd700; }
-    .grupos-tabs { position: fixed; top: 125px; left: 0; right: 0; z-index: 98; background: #1a2733; border-bottom: 1px solid #39ff6a11; display: flex; gap: 0; padding: 0 40px; overflow-x: auto; justify-content: center; }
+    .grupos-tabs { position: fixed; top: calc(125px + var(--ticker-h)); left: 0; right: 0; z-index: 98; background: #1a2733; border-bottom: 1px solid #39ff6a11; display: flex; gap: 0; padding: 0 40px; overflow-x: auto; justify-content: center; }
     .grupo-tab { padding: 12px 22px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #ffffff33; font-size: 0.82rem; font-weight: 700; letter-spacing: 1.5px; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
     .grupo-tab:hover { color: #ffffff77; }
     .grupo-tab.activo { color: #39ff6a; border-bottom-color: #39ff6a; }
@@ -677,13 +697,17 @@ export default function App() {
     .msg-warning { color: #ffd700; text-align: center; margin-top: 16px; font-size: 0.88rem; }
     @keyframes slide { 0% { left: -12px; } 100% { left: 40px; } }
     @media (max-width: 768px) {
+      .ticker-item { padding: 0 16px; gap: 8px; }
+      .ticker-equipo { font-size: 0.78rem; }
+      .ticker-badge { font-size: 0.66rem; padding: 3px 9px; }
+      .ticker-flag { width: 18px; }
       .header { padding: 12px 16px; }
       .header-titulo { font-size: 0.85rem; letter-spacing: 0.5px; }
       .header-user { display: none; }
       .btn-logout { padding: 6px 10px; font-size: 0.7rem; }
-      .tabs { padding: 0 4px; top: 62px; }
+      .tabs { padding: 0 4px; top: calc(62px + var(--ticker-h)); }
       .tab { padding: 10px 10px; font-size: 0.7rem; letter-spacing: 0; }
-      .grupos-tabs { top: 106px; padding: 0 4px; justify-content: flex-start; }
+      .grupos-tabs { top: calc(106px + var(--ticker-h)); padding: 0 4px; justify-content: flex-start; }
       .grupo-tab { padding: 8px 10px; font-size: 0.7rem; letter-spacing: 0; }
       .partido-card { padding: 14px 10px; }
       .admin-card { padding: 14px 10px; }
@@ -754,6 +778,13 @@ export default function App() {
   return (
     <>
       <style>{STYLES}</style>
+      <TickerBar
+        partidos={TODOS_PARTIDOS}
+        marcadores={marcadores}
+        ahora={ahora}
+        getEstadoPartido={getEstadoPartido}
+        formatHora={formatHora}
+      />
       <div style={{ backgroundColor: "#17212B", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
         <div className="header">
@@ -785,7 +816,7 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ width: "100%", maxWidth: "1200px", margin: "0 auto", padding: "30px 16px", marginTop: tab === "pronosticos" || tab === "admin" ? "170px" : "120px", flex: 1 }}>
+        <div style={{ width: "100%", maxWidth: "1200px", margin: "0 auto", padding: "30px 16px", marginTop: tab === "pronosticos" || tab === "admin" ? "calc(170px + var(--ticker-h))" : "calc(120px + var(--ticker-h))", flex: 1 }}>
 
           {tab === "pronosticos" && (
             <>
