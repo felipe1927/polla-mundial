@@ -1,4 +1,4 @@
-import React from "react"
+
 
 const getGrupoDePartido = (partido) => partido.id.charAt(0)
 

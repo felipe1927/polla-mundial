@@ -11,7 +11,7 @@ function PartidoCard({ partido, esAdmin, resultados, pronosticos, marcadores, se
     <div key={partido.id} className={cardClass}>
       <div style={{ position: "relative", marginBottom: "12px", paddingRight: "120px" }}>
         <p style={{ color: "#ffffff55", fontSize: "0.78rem", letterSpacing: "1px", textAlign: "center", maxWidth: "100%", margin: "0 auto" }}>
-          📅 {partido.fecha} · {new Date(partido.hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {partido.estadio}
+          📅 {partido.fecha} · {new Date(partido.hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </p>
         <div style={{ position: "absolute", right: 0, top: 0, minWidth: "100px", display: "flex", justifyContent: "flex-end", whiteSpace: "nowrap" }}>
           {tab === "pronosticos" ? renderEstadoPronostico(partido) : renderEstado(partido.hora)}

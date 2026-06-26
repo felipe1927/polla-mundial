@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
+import * as XLSX from 'xlsx'
+import { jsPDF } from 'jspdf'
+
 import PartidoCard from "./components/PartidoCard"
+import PartidoCardR32 from "./components/PartidoCardR32"
 import TickerBar from "./components/TickerBar"
+import PARTIDOS_R32 from "./data/dieciseisavos"
 import { auth, db } from "./firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "firebase/firestore"
@@ -86,7 +91,7 @@ const GRUPOS = {
     { id: "J1", local: "Argentina", visitante: "Argelia", fecha: "16 jun 2026", hora: "2026-06-16T20:00:00", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "dz" },
     { id: "J2", local: "Austria", visitante: "Jordania", fecha: "16 jun 2026", hora: "2026-06-16T23:00:00", estadio: "Estadio San Francisco", flagLocal: "at", flagVisitante: "jo" },
     { id: "J3", local: "Argentina", visitante: "Austria", fecha: "22 jun 2026", hora: "2026-06-22T12:00:00", estadio: "Estadio Dallas", flagLocal: "ar", flagVisitante: "at" },
-    { id: "J4", local: "Jordania", visitante: "Argelia", fecha: "22 jun 2026", hora: "2026-06-22T16:00:00", estadio: "Estadio Miami", flagLocal: "jo", flagVisitante: "dz" },
+    { id: "J4", local: "Jordania", visitante: "Argelia", fecha: "22 jun 2026", hora: "2026-06-22T22:00:00", estadio: "Estadio Miami", flagLocal: "jo", flagVisitante: "dz" },
     { id: "J5", local: "Jordania", visitante: "Argentina", fecha: "27 jun 2026", hora: "2026-06-27T21:00:00", estadio: "Estadio Arlington", flagLocal: "jo", flagVisitante: "ar" },
     { id: "J6", local: "Argelia", visitante: "Austria", fecha: "27 jun 2026", hora: "2026-06-27T21:00:00", estadio: "Estadio Kansas City", flagLocal: "dz", flagVisitante: "at" },
   ],
@@ -125,6 +130,7 @@ export default function App() {
   const [tab, setTab] = useState("pronosticos")
   const [grupoActivo, setGrupoActivo] = useState("A")
   const [tabla, setTabla] = useState([])
+  const [tablaFaseFinal, setTablaFaseFinal] = useState([])
   const [resultados, setResultados] = useState({})
   const [marcadores, setMarcadores] = useState({})
   const [usuariosAdmin, setUsuariosAdmin] = useState([])
@@ -132,14 +138,39 @@ export default function App() {
   const [adminTab, setAdminTab] = useState("resultados")
   const [ahora, setAhora] = useState(new Date())
   const [detalleData, setDetalleData] = useState({})
+  const [detalleFaseFinal, setDetalleFaseFinal] = useState({})
+  const [marcadorFaseFinal, setMarcadorFaseFinal] = useState({})
   const [modalUsuario, setModalUsuario] = useState(null)
+  const [modalUsuarioFaseFinal, setModalUsuarioFaseFinal] = useState(null)
   const [modalGrupo, setModalGrupo] = useState("A")
   const [perfilData, setPerfilData] = useState(null)
   const [gruposData, setGruposData] = useState({})
-  const [compararConUID, setCompararConUID] = useState(null)
-  const [comparacionData, setComparacionData] = useState(null)
-  
 
+  const [mostrarGruposTabs, setMostrarGruposTabs] = useState(true)
+  const [scrollPrevio, setScrollPrevio] = useState(0)
+  const [etapaFaseFinal, setEtapaFaseFinal] = useState("DIECISEISAVOS")
+
+  // === R32 (Dieciseisavos de Final) - completamente separado de fase de grupos ===
+  const [pronosticosR32, setPronosticosR32] = useState({})
+  const [enviadoR32, setEnviadoR32] = useState(false)
+
+  const [resultadosR32, setResultadosR32] = useState({})
+  const [marcadoresR32, setMarcadoresR32] = useState({})
+  const [mensajeR32, setMensajeR32] = useState("")
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollActual = window.scrollY
+      if (scrollActual > scrollPrevio && scrollActual > 60) {
+        setMostrarGruposTabs(false)
+      } else {
+        setMostrarGruposTabs(true)
+      }
+      setScrollPrevio(scrollActual)
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [scrollPrevio])
   useEffect(() => {
     const interval = setInterval(() => setAhora(new Date()), 1000)
     return () => clearInterval(interval)
@@ -162,7 +193,9 @@ export default function App() {
       const cred = await signInWithEmailAndPassword(auth, email, password)
       setUsuario(cred.user)
       await cargarPronosticos(cred.user.uid)
+      await cargarPronosticosR32(cred.user.uid)
       await cargarResultados()
+      await cargarTablaFaseFinal()
       if (cred.user.email === ADMIN_EMAIL) setTab("admin")
     } catch (e) {
       setError("Correo o contraseña incorrectos")
@@ -217,6 +250,19 @@ export default function App() {
     })
     filas.sort((a, b) => b.puntos - a.puntos)
     setTabla(filas)
+  }
+
+  const cargarTablaFaseFinal = async () => {
+    const snap = await getDocs(collection(db, "pronosticosR32"))
+    const filas = []
+    snap.forEach(d => {
+      const data = d.data()
+      if (data.email === ADMIN_EMAIL) return
+      const puntos = data.puntajeR32 || 0 // Leer puntos precalculados
+      filas.push({ uid: d.id, email: data.email, nombre: getNombre(data.email), puntos, enviado: data.enviado, picks: data.picks })
+    })
+    filas.sort((a, b) => b.puntos - a.puntos)
+    setTablaFaseFinal(filas)
   }
 
   const cargarGrupos = async () => {
@@ -286,6 +332,124 @@ export default function App() {
     setUsuariosAdmin(lista)
   }
 
+  // === R32 Firebase functions ===
+  /* disabled (no-unused-vars lint) */
+  const cargarPronosticosR32 = async (uid) => {
+
+    const snap = await getDoc(doc(db, "pronosticosR32", uid))
+    if (snap.exists()) {
+      setPronosticosR32(snap.data().picks || {})
+      setEnviadoR32(snap.data().enviado || false)
+      setFechaEnvioR32(snap.data().fechaEnvio || null)
+    }
+  }
+
+  /* disabled (no-unused-vars lint) */
+  const cargarResultadosR32 = async () => {
+
+    const snap = await getDoc(doc(db, "resultadosR32", "oficial"))
+    if (snap.exists()) {
+      setResultadosR32(snap.data().picks || {})
+      setMarcadoresR32(snap.data().marcadores || {})
+    }
+  }
+
+  const enviarPronosticosR32 = async () => {
+    if (Object.keys(pronosticosR32).length === 0) {
+      setMensajeR32("⚠️ Debes pronosticar al menos 1 partido antes de guardar.")
+      return
+    }
+    
+    // Validar que todos los pronósticos tengan AMBOS valores (local y visitante)
+    for (const [id, pronos] of Object.entries(pronosticosR32)) {
+      if (pronos.local === "" || pronos.local === undefined || pronos.visitante === "" || pronos.visitante === undefined) {
+        setMensajeR32("⚠️ Todos los pronósticos deben tener ambos marcadores (goles local y visitante).")
+        return
+      }
+    }
+    
+    try {
+      const fecha = new Date().toISOString()
+      await setDoc(doc(db, "pronosticosR32", usuario.uid), {
+        email: usuario.email, 
+        picks: pronosticosR32, 
+        enviado: true, 
+        fechaEnvio: fecha
+      })
+      setEnviadoR32(true)
+      setGuardadoR32(true)
+      setMensajeR32("✅ ¡Pronósticos guardados!")
+
+      // Vuelve al estado normal después de 2 segundos
+      setTimeout(() => {
+        setGuardadoR32(false)
+      }, 2000)
+    } catch (e) {
+      setMensajeR32("Error al guardar. Intenta de nuevo.")
+    }
+  }
+
+  const limpiarPronosticosR32 = async () => {
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos de Dieciseisavos?")) return
+    try {
+      await deleteDoc(doc(db, "pronosticosR32", usuario.uid))
+      setPronosticosR32({})
+      setEnviadoR32(false)
+
+      setMensajeR32("🗑️ Pronósticos de Dieciseisavos eliminados.")
+    } catch (e) {
+      setMensajeR32("Error al limpiar.")
+    }
+  }
+
+  /* disabled (no-unused-vars lint) */
+  const guardarResultadosR32 = async () => {
+    try {
+      // Guardar marcadores y picks reales
+      await setDoc(doc(db, "resultadosR32", "oficial"), {
+        picks: resultadosR32,
+        marcadores: marcadoresR32,
+        fechaActualizacion: new Date().toISOString()
+      })
+
+      // Calcular puntos de todos los usuarios
+      const snap = await getDocs(collection(db, "pronosticosR32"))
+      const actualizaciones = []
+
+      snap.forEach(d => {
+        const data = d.data()
+        if (data.email === ADMIN_EMAIL) return
+
+        const picks = data.picks || {}
+        let puntajeTotal = 0
+
+        // Calcular puntos por cada partido
+        PARTIDOS_R32.forEach(p => {
+          if (picks[p.id] && marcadoresR32[p.id]) {
+            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresR32[p.id])
+          }
+        })
+
+        // Guardar puntos en el documento del usuario
+        actualizaciones.push(
+          setDoc(doc(db, "pronosticosR32", d.id), {
+            ...data,
+            puntajeR32: puntajeTotal
+          })
+        )
+      })
+
+      await Promise.all(actualizaciones)
+      setMensajeR32("✅ Resultados guardados y puntos calculados correctamente.")
+      
+      // Recargar tabla de fase final
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error(e)
+      setMensajeR32("Error al guardar resultados.")
+    }
+  }
+
   const seleccionar = useCallback((partidoId, opcion) => {
     if (enviado || torneoFinalizado()) return
     setPronosticos(prev => ({ ...prev, [partidoId]: opcion }))
@@ -309,6 +473,8 @@ export default function App() {
       setMensaje("Error al guardar. Intenta de nuevo.")
     }
   }
+
+  const [guardadoR32, setGuardadoR32] = useState(false)
 
   const limpiarMisPronosticos = async () => {
     if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos?")) return
@@ -356,9 +522,14 @@ export default function App() {
     setEnviado(false)
     setFechaEnvio(null)
     setMensaje("")
+    setPronosticosR32({})
+    setEnviadoR32(false)
+    setMensajeR32("")
     setTab("pronosticos")
     setTabla([])
+    setTablaFaseFinal([])
     setModalUsuario(null)
+    setModalUsuarioFaseFinal(null)
     setPerfilData(null)
     setGruposData({})
   }
@@ -367,6 +538,7 @@ export default function App() {
     setTab(t)
     setMensaje("")
     if (t === "tabla") await cargarTabla()
+    if (t === "tabla-fase-final") await cargarTablaFaseFinal()
     if (t === "grupos") await cargarGrupos()
     if (t === "perfil") await cargarPerfil()
     if (t === "admin") { await cargarResultados(); await cargarUsuariosAdmin() }
@@ -380,7 +552,103 @@ export default function App() {
     setModalGrupo("A")
   }
 
+  const abrirModalFaseFinal = async (fila) => {
+    const resSnap = await getDoc(doc(db, "resultadosR32", "oficial"))
+    const marcadores = resSnap.exists() ? resSnap.data().marcadores || {} : {}
+    setMarcadorFaseFinal(marcadores)
+    setModalUsuarioFaseFinal(fila)
+  }
+
+  const calcularPuntosR32 = (pick, marcador) => {
+    if (!pick || !marcador) return 0
+    
+    const pickLocal = parseInt(pick.local) || 0
+    const pickVisitante = parseInt(pick.visitante) || 0
+    const marLocal = parseInt(marcador.local) || 0
+    const marVisitante = parseInt(marcador.visitante) || 0
+    
+    // Determinar resultado del pick
+    let pickResultado
+    if (pickLocal > pickVisitante) pickResultado = "local"
+    else if (pickLocal < pickVisitante) pickResultado = "visitante"
+    else pickResultado = "empate"
+    
+    // Determinar resultado oficial
+    let marResultado
+    if (marLocal > marVisitante) marResultado = "local"
+    else if (marLocal < marVisitante) marResultado = "visitante"
+    else marResultado = "empate"
+    
+    // Si el resultado es diferente, 0 puntos
+    if (pickResultado !== marResultado) return 0
+    
+    // Si marcador exacto: 10 puntos
+    if (pickLocal === marLocal && pickVisitante === marVisitante) return 10
+    
+    // Si es empate correcto: 5 puntos
+    if (pickResultado === "empate") return 5
+    
+    // Si ganador correcto y misma diferencia de gol: 7 puntos
+    const pickDiferencia = Math.abs(pickLocal - pickVisitante)
+    const marDiferencia = Math.abs(marLocal - marVisitante)
+    if (pickDiferencia === marDiferencia) return 7
+    
+    // Si solo ganador correcto: 3 puntos
+    return 3
+  }
+
+  const exportarExcel = (usuario) => {
+    const datos = PARTIDOS_R32.map(p => ({
+      Partido: `${p.local} vs ${p.visitante}`,
+      "Mi Pronóstico": usuario.picks?.[p.id] ? `${usuario.picks[p.id].local || "-"}-${usuario.picks[p.id].visitante || "-"}` : "Sin pronóstico",
+      Resultado: marcadorFaseFinal[p.id] ? `${marcadorFaseFinal[p.id].local || "-"}-${marcadorFaseFinal[p.id].visitante || "-"}` : "Pendiente",
+      Estado: !usuario.picks?.[p.id] ? "—" : !marcadorFaseFinal[p.id] ? "⏳" : usuario.picks[p.id].local === marcadorFaseFinal[p.id].local && usuario.picks[p.id].visitante === marcadorFaseFinal[p.id].visitante ? "✅ Acierto" : "❌ Fallo"
+    }))
+    
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(datos)
+    XLSX.utils.book_append_sheet(wb, ws, "Fase Final")
+    XLSX.writeFile(wb, `Pronosticos_FaseFinal_${usuario.nombre}.xlsx`)
+  }
+
+  const exportarPDF = (usuario) => {
+    const doc = new jsPDF()
+    const datos = PARTIDOS_R32.map(p => [
+      `${p.local} vs ${p.visitante}`,
+      usuario.picks?.[p.id] ? `${usuario.picks[p.id].local || "-"}-${usuario.picks[p.id].visitante || "-"}` : "Sin pronóstico",
+      marcadorFaseFinal[p.id] ? `${marcadorFaseFinal[p.id].local || "-"}-${marcadorFaseFinal[p.id].visitante || "-"}` : "Pendiente",
+      !usuario.picks?.[p.id] ? "—" : !marcadorFaseFinal[p.id] ? "⏳" : usuario.picks[p.id].local === marcadorFaseFinal[p.id].local && usuario.picks[p.id].visitante === marcadorFaseFinal[p.id].visitante ? "✅" : "❌"
+    ])
+    
+    doc.setFontSize(16)
+    doc.text(`Pronósticos Fase Final - ${usuario.nombre}`, 14, 15)
+    
+    let y = 30
+    const colWidths = [60, 50, 40, 30]
+    const headers = ["Partido", "Mi Pronóstico", "Resultado", "Estado"]
+    
+    doc.setFontSize(10)
+    doc.setTextColor(57, 255, 106)
+    headers.forEach((h, i) => {
+      doc.text(h, 14 + colWidths.slice(0, i).reduce((a, b) => a + b, 0), y)
+    })
+    y += 10
+    
+    doc.setTextColor(0, 0, 0)
+    doc.setFontSize(9)
+    datos.forEach(row => {
+      row.forEach((cell, i) => {
+        doc.text(cell, 14 + colWidths.slice(0, i).reduce((a, b) => a + b, 0), y)
+      })
+      y += 8
+    })
+    
+    doc.save(`Pronosticos_FaseFinal_${usuario.nombre}.pdf`)
+  }
+
+  /* disabled (no-unused-vars lint) */
   const cargarComparacion = async (uid) => {
+
     if (!uid) {
       setComparacionData(null)
       setCompararConUID(null)
@@ -538,11 +806,11 @@ export default function App() {
     return GRUPOS[grupo].map(partido => {
       const resultadoOficial = resultados[partido.id]
       const pick = pronosticos[partido.id]
+
       const esAcierto = !esAdmin && tab === "pronosticos" && pick && resultadoOficial && pick === resultadoOficial
       const esFallo = !esAdmin && tab === "pronosticos" && pick && resultadoOficial && pick !== resultadoOficial
-      const cardClass = esAdmin ? "admin-card" : `partido-card${esAcierto ? " partido-acierto" : esFallo ? " partido-fallo" : ""}`
-
       return (
+
         <PartidoCard
           key={partido.id}
           partido={partido}
@@ -597,13 +865,19 @@ export default function App() {
     .tab.admin-tab { color: #ffd70088; }
     .tab.admin-tab:hover { color: #ffd700; }
     .tab.admin-tab.activo { color: #ffd700; border-bottom-color: #ffd700; }
-    .grupos-tabs { position: fixed; top: calc(125px + var(--ticker-h)); left: 0; right: 0; z-index: 98; background: #1a2733; border-bottom: 1px solid #39ff6a11; display: flex; gap: 0; padding: 0 40px; overflow-x: auto; justify-content: center; }
-    .grupo-tab { padding: 12px 22px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #ffffff33; font-size: 0.82rem; font-weight: 700; letter-spacing: 1.5px; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
-    .grupo-tab:hover { color: #ffffff77; }
-    .grupo-tab.activo { color: #39ff6a; border-bottom-color: #39ff6a; }
-    .grupo-tab.admin-grupo.activo { color: #ffd700; border-bottom-color: #ffd700; }
-    .grupo-tab.admin-grupo { color: #ffd70033; }
-    .grupo-tab.admin-grupo:hover { color: #ffd70077; }
+    .grupos-tabs { position: fixed; top: calc(125px + var(--ticker-h)); left: 0; right: 0; z-index: 98; background: #17212B; /* border-bottom: 1px solid #39ff6a11 */; display: flex; gap: 12px; padding: 12px 40px; overflow-x: auto; justify-content: center; transition: opacity 0.3s ease, transform 0.3s ease; opacity: 1; transform: translateY(0); }
+    .grupos-tabs.oculto { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+    .grupo-tab { padding: 8px 18px; background: transparent; border: 1.5px solid #39ff6a33; border-radius: 24px; color: #ffffff33; font-size: 0.8rem; font-weight: 700; letter-spacing: 1.2px; cursor: pointer; transition: all 0.3s; white-space: nowrap; }
+    .grupo-tab:hover { border-color: #39ff6a77; color: #ffffff77; }
+    .grupo-tab.activo { background: #39ff6a22; border-color: #39ff6a; color: #39ff6a; box-shadow: 0 0 12px #39ff6a44; }
+    .grupo-tab.admin-grupo.activo { background: #ffd70033; border-color: #ffd700; color: #ffd700; box-shadow: 0 0 12px #ffd70044; }
+    .grupo-tab.admin-grupo { border-color: #ffd70033; color: #ffd70055; }
+    .grupo-tab.admin-grupo:hover { border-color: #ffd70077; color: #ffd70088; }
+    .fase-tabs { position: fixed; top: calc(125px + var(--ticker-h)); left: 0; right: 0; z-index: 98; background: #17212B; /* border-bottom: 1px solid #39ff6a11 */; display: flex; gap: 12px; padding: 12px 40px; overflow-x: auto; justify-content: center; transition: opacity 0.3s ease, transform 0.3s ease; opacity: 1; transform: translateY(0); }
+    .fase-tabs.oculto { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+    .fase-tab { padding: 8px 18px; background: transparent; border: 1.5px solid #39ff6a33; border-radius: 24px; color: #ffffff33; font-size: 0.8rem; font-weight: 700; letter-spacing: 1.2px; cursor: pointer; transition: all 0.3s; white-space: nowrap; }
+    .fase-tab:hover { border-color: #39ff6a77; color: #ffffff77; }
+    .fase-tab.activo { background: #39ff6a22; border-color: #39ff6a; color: #39ff6a; box-shadow: 0 0 12px #39ff6a44; }
     .grupo-titulo { color: #39ff6a; font-size: 1rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 20px; text-transform: uppercase; }
     .partido-card { background: linear-gradient(145deg, #1e2d3d, #17212B); border: 1px solid #39ff6a22; border-radius: 14px; padding: 28px 40px 22px; margin-bottom: 16px; transition: box-shadow 0.3s; }
     .partido-card:hover { box-shadow: 0 0 20px #39ff6a18; }
@@ -707,8 +981,10 @@ export default function App() {
       .btn-logout { padding: 6px 10px; font-size: 0.7rem; }
       .tabs { padding: 0 4px; top: calc(62px + var(--ticker-h)); }
       .tab { padding: 10px 10px; font-size: 0.7rem; letter-spacing: 0; }
-      .grupos-tabs { top: calc(106px + var(--ticker-h)); padding: 0 4px; justify-content: flex-start; }
-      .grupo-tab { padding: 8px 10px; font-size: 0.7rem; letter-spacing: 0; }
+      .grupos-tabs { top: calc(106px + var(--ticker-h)); padding: 8px 8px; gap: 6px; justify-content: flex-start; }
+      .grupo-tab { padding: 6px 12px; font-size: 0.72rem; }
+      .fase-tabs { top: calc(106px + var(--ticker-h)); padding: 8px 8px; gap: 6px; justify-content: flex-start; }
+      .fase-tab { padding: 6px 12px; font-size: 0.72rem; }
       .partido-card { padding: 14px 10px; }
       .admin-card { padding: 14px 10px; }
       .partido-top-row { flex-direction: column; align-items: center; position: static; gap: 8px; }
@@ -798,15 +1074,17 @@ export default function App() {
 
         <div className="tabs">
           {!isAdmin && <button className={`tab ${tab === "pronosticos" ? "activo" : ""}`} onClick={() => cambiarTab("pronosticos")}>📋 MIS PRONÓSTICOS</button>}
-          <button className={`tab ${tab === "grupos" ? "activo" : ""}`} onClick={() => cambiarTab("grupos")}>📊 GRUPOS</button>
-          
+          {!isAdmin && <button className={`tab ${tab === "fase-final" ? "activo" : ""}`} onClick={() => setTab("fase-final")}>🏅 FASE FINAL</button>}
+          <button className={`tab ${tab === "grupos" ? "activo" : ""}`} onClick={() => cambiarTab("grupos")}>📊 GRUPOS</button>          
           <button className={`tab ${tab === "tabla" ? "activo" : ""}`} onClick={() => cambiarTab("tabla")}>🏆 TABLA</button>
+          <button className={`tab ${tab === "tabla-fase-final" ? "activo" : ""}`} onClick={() => cambiarTab("tabla-fase-final")}>🏆 TABLA FASE FINAL</button>
           {!isAdmin && <button className={`tab ${tab === "perfil" ? "activo" : ""}`} onClick={() => cambiarTab("perfil")}>👤 MI PERFIL</button>}
+          <button className={`tab ${tab === "reglas" ? "activo" : ""}`} onClick={() => cambiarTab("reglas")}>📖 REGLAS</button>
           {isAdmin && <button className={`tab admin-tab ${tab === "admin" ? "activo" : ""}`} onClick={() => cambiarTab("admin")}>⚙️ ADMIN</button>}
         </div>
 
         {(tab === "pronosticos" || tab === "admin") && (
-          <div className="grupos-tabs">
+          <div className={`grupos-tabs ${!mostrarGruposTabs ? "oculto" : ""}`}>
             {Object.keys(GRUPOS).map(g => (
               <button key={g} className={`grupo-tab ${tab === "admin" ? "admin-grupo" : ""} ${(tab === "pronosticos" ? grupoActivo : grupoAdminActivo) === g ? "activo" : ""}`}
                 onClick={() => { tab === "pronosticos" ? setGrupoActivo(g) : setGrupoAdminActivo(g); window.scrollTo({ top: 0, behavior: "smooth" }) }}>
@@ -816,7 +1094,7 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ width: "100%", maxWidth: "1200px", margin: "0 auto", padding: "30px 16px", marginTop: tab === "pronosticos" || tab === "admin" ? "calc(170px + var(--ticker-h))" : "calc(120px + var(--ticker-h))", flex: 1 }}>
+        <div style={{ width: "100%", maxWidth: "1200px", margin: "0 auto", padding: "30px 16px", marginTop: tab === "pronosticos" || tab === "admin" || tab === "fase-final" ? "calc(170px + var(--ticker-h))" : "calc(120px + var(--ticker-h))", flex: 1 }}>
 
           {tab === "pronosticos" && (
             <>
@@ -826,7 +1104,6 @@ export default function App() {
                   <span style={{ color: "#39ff6a", fontWeight: "900", fontSize: "1.1rem", letterSpacing: "2px", textShadow: "0 0 10px #39ff6a66" }}>{contadorTexto()}</span>
                 </div>
               )}
-              <p className="grupo-titulo">⚽ Grupo {grupoActivo}</p>
               <p className="progreso-texto">{progreso}/{total} partidos pronosticados</p>
               <div className="progreso-bar"><div className="progreso-fill" style={{ width: `${(progreso / total) * 100}%` }} /></div>
               {renderPartidos(grupoActivo)}
@@ -860,18 +1137,701 @@ export default function App() {
             </>
           )}
 
-          
+          {tab === "fase-final" && (
+            <>
+              {etapaFaseFinal !== "DIECISEISAVOS" && (
+                <p className="grupo-titulo" style={{ marginTop: "40px", textAlign: "center", color: "#ffffff44", fontSize: "0.9rem", fontWeight: "600" }}>
+                  🛠️ Fase Final - PROXIMAMENTE
+                </p>
+              )}
+              <div className={`fase-tabs ${!mostrarGruposTabs ? "oculto" : ""}`}>
+                {["DIECISEISAVOS", "OCTAVOS", "CUARTOS", "SEMIFINALES", "TERCER PUESTO", "FINAL"].map(etapa => (
+                  <button key={etapa} className={`fase-tab ${etapaFaseFinal === etapa ? "activo" : ""}`} onClick={() => setEtapaFaseFinal(etapa)}>{etapa}</button>
+                ))}
+              </div>
+
+              {etapaFaseFinal === "DIECISEISAVOS" && (
+                <>
+                  <div style={{ marginBottom: "18px" }}>
+                    <div className="progreso-texto" style={{ textAlign: "right" }}>
+                      {PARTIDOS_R32.filter(p => pronosticosR32[p.id]?.local !== undefined && pronosticosR32[p.id]?.local !== "" && pronosticosR32[p.id]?.visitante !== undefined && pronosticosR32[p.id]?.visitante !== "").length}/{PARTIDOS_R32.length} partidos pronosticados
+                    </div>
+                    <div className="progreso-bar">
+                      <div
+                        className="progreso-fill"
+                        style={{ width: `${(PARTIDOS_R32.filter(p => pronosticosR32[p.id]?.local !== undefined && pronosticosR32[p.id]?.local !== "" && pronosticosR32[p.id]?.visitante !== undefined && pronosticosR32[p.id]?.visitante !== "").length / PARTIDOS_R32.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {PARTIDOS_R32.map((partido) => (
+                    <PartidoCardR32
+                      key={partido.id}
+                      partido={partido}
+                      esAdmin={false}
+                      marcadoresR32={marcadoresR32}
+                      pronosticosR32={pronosticosR32}
+                      setMarcadoresR32={setMarcadoresR32}
+                      setPronosticosR32={setPronosticosR32}
+                      enviadoR32={enviadoR32}
+                      r32Cerrado={torneoFinalizado()}
+                      tab="fase-final"
+                      renderEstadoPronostico={renderEstadoPronostico}
+                      renderEstado={renderEstado}
+                    />
+                  ))}
+
+                  {mensajeR32 && (
+                    <p className={mensajeR32.startsWith("✅") || mensajeR32.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>
+                      {mensajeR32}
+                    </p>
+                  )}
+
+                  {Object.keys(pronosticosR32).length > 0 ? (
+                    <>
+                      <button 
+                        className="btn-enviar" 
+                        onClick={enviarPronosticosR32}
+                        disabled={false}
+                        style={{
+                          opacity: false ? 0.5 : 1,
+                          cursor: false ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {guardadoR32 ? "✅ ¡GUARDADO!" : "💾 GUARDAR PRONÓSTICOS"}  
+                      </button>
+                      <button className="btn-limpiar" onClick={limpiarPronosticosR32}>
+                        🗑️ LIMPIAR MIS PRONÓSTICOS
+                      </button>
+                      {enviadoR32 && (
+                        <p className="msg-enviado" style={{ marginTop: "12px" }}>
+                          ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#ffffff44", textAlign: "center" }}>Haz pronósticos para poder guardarlos</p>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {tab === "reglas" && (
+            <div style={{ marginTop: "30px" }}>
+              <div style={{ 
+                textAlign: "center", 
+                marginBottom: "50px"
+              }}>
+                <h2 style={{
+                  color: "#39ff6a",
+                  fontSize: "2rem",
+                  fontWeight: "900",
+                  letterSpacing: "2px",
+                  textShadow: "0 0 16px #39ff6a77",
+                  marginBottom: "16px"
+                }}>
+                  SISTEMA DE PUNTUACIÓN
+                </h2>
+                
+                {/* NUEVO: Sección "¿Cómo funciona?" */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "1px solid #39ff6a33",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  marginTop: "20px",
+                  textAlign: "left",
+                  maxWidth: "800px",
+                  margin: "20px auto 0"
+                }}>
+                  <h3 style={{
+                    color: "#39ff6a",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "16px",
+                    letterSpacing: "1px"
+                  }}>
+                    ¿CÓMO FUNCIONA?
+                  </h3>
+                  
+                  <p style={{
+                    color: "#ffffff",
+                    fontSize: "0.95rem",
+                    fontWeight: "600",
+                    marginBottom: "12px",
+                    lineHeight: "1.6"
+                  }}>
+                    Predice el resultado de cada partido antes de que comience. Cuanto más precisa sea tu predicción, más puntos ganarás.
+                  </p>
+
+                  <p style={{
+                    color: "#ffffff",
+                    fontSize: "0.95rem",
+                    fontWeight: "600",
+                    marginBottom: "12px",
+                    lineHeight: "1.6"
+                  }}>
+                    Se toma en cuenta el resultado completo del partido (90' + tiempo extra). <strong>IMPORTANTE:</strong> Las series de penales <strong>NO cuentan</strong> para el resultado.
+                  </p>
+
+                  <p style={{
+                    color: "#ffffff",
+                    fontSize: "0.95rem",
+                    fontWeight: "600",
+                    marginBottom: "0px",
+                    lineHeight: "1.6"
+                  }}>
+                    En caso de haber más de un ganador final en la tabla de puntuación, el monto total será dividido entre estos.
+                  </p>
+                </div>
+              </div>
+
+              {/* TARJETAS DE PUNTUACIÓN - Igual a como estaba */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: "20px",
+                marginBottom: "40px"
+              }}>
+                {/* TARJETA 1 - 0 PUNTOS */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "2px solid #ffffff11",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  transition: "all 0.3s ease",
+                  cursor: "default",
+                  position: "relative",
+                  overflow: "hidden"
+                }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: "3px",
+                    background: "#ff6b6b"
+                  }} />
+                  <div style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "900",
+                    color: "#ff6b6b",
+                    marginBottom: "12px",
+                    textShadow: "0 0 12px #ff6b6b66"
+                  }}>
+                    0
+                  </div>
+                  <h3 style={{
+                    color: "#ffffff",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "8px",
+                    letterSpacing: "0.5px"
+                  }}>
+                    SIN ACIERTO
+                  </h3>
+                  <p style={{
+                    color: "#ffffff66",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.6",
+                    fontWeight: "500"
+                  }}>
+                    Cuando tu pronóstico no coincide con el resultado real del partido.
+                  </p>
+                </div>
+
+                {/* TARJETA 2 - 3 PUNTOS */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "2px solid #ffffff11",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  transition: "all 0.3s ease",
+                  cursor: "default",
+                  position: "relative",
+                  overflow: "hidden"
+                }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: "3px",
+                    background: "#4a9eff"
+                  }} />
+                  <div style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "900",
+                    color: "#4a9eff",
+                    marginBottom: "12px",
+                    textShadow: "0 0 12px #4a9eff66"
+                  }}>
+                    3
+                  </div>
+                  <h3 style={{
+                    color: "#ffffff",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "8px",
+                    letterSpacing: "0.5px"
+                  }}>
+                    RESULTADO CORRECTO
+                  </h3>
+                  <p style={{
+                    color: "#ffffff66",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.6",
+                    fontWeight: "500"
+                  }}>
+                    Acertaste el ganador o el equipo que avanza a la siguiente fase. Sin importar los goles.
+                  </p>
+                </div>
+
+                {/* TARJETA 3 - 5 PUNTOS */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "2px solid #ffffff11",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  transition: "all 0.3s ease",
+                  cursor: "default",
+                  position: "relative",
+                  overflow: "hidden"
+                }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: "3px",
+                    background: "#ffd700"
+                  }} />
+                  <div style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "900",
+                    color: "#ffd700",
+                    marginBottom: "12px",
+                    textShadow: "0 0 12px #ffd70066"
+                  }}>
+                    5
+                  </div>
+                  <h3 style={{
+                    color: "#ffffff",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "8px",
+                    letterSpacing: "0.5px"
+                  }}>
+                    EMPATE CORRECTO
+                  </h3>
+                  <p style={{
+                    color: "#ffffff66",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.6",
+                    fontWeight: "500"
+                  }}>
+                    Acertaste que el partido terminaría en empate. Sin importar la cantidad de goles.
+                  </p>
+                </div>
+
+                {/* TARJETA 4 - 7 PUNTOS */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "2px solid #ffffff11",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  transition: "all 0.3s ease",
+                  cursor: "default",
+                  position: "relative",
+                  overflow: "hidden"
+                }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: "3px",
+                    background: "#39ff6a"
+                  }} />
+                  <div style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "900",
+                    color: "#39ff6a",
+                    marginBottom: "12px",
+                    textShadow: "0 0 12px #39ff6a77"
+                  }}>
+                    7
+                  </div>
+                  <h3 style={{
+                    color: "#ffffff",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "8px",
+                    letterSpacing: "0.5px"
+                  }}>
+                    GANADOR + DIFERENCIA
+                  </h3>
+                  <p style={{
+                    color: "#ffffff66",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.6",
+                    fontWeight: "500"
+                  }}>
+                    Acertaste el ganador <strong>y</strong> la misma diferencia de goles exacta.
+                  </p>
+                </div>
+
+                {/* TARJETA 5 - 10 PUNTOS */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "2px solid #39ff6a44",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  transition: "all 0.3s ease",
+                  cursor: "default",
+                  position: "relative",
+                  overflow: "hidden",
+                  boxShadow: "0 0 20px #39ff6a22"
+                }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: "3px",
+                    background: "linear-gradient(90deg, #39ff6a, #ffd700)"
+                  }} />
+                  <div style={{
+                    display: "flex",
+                    gap: "8px",
+                    alignItems: "baseline",
+                    marginBottom: "12px"
+                  }}>
+                    <div style={{
+                      fontSize: "2.5rem",
+                      fontWeight: "900",
+                      color: "#39ff6a",
+                      textShadow: "0 0 12px #39ff6a77"
+                    }}>
+                      10
+                    </div>
+                    <div style={{
+                      fontSize: "0.75rem",
+                      color: "#39ff6a",
+                      fontWeight: "700",
+                      letterSpacing: "1px"
+                    }}>
+                      🏆 MÁXIMO
+                    </div>
+                  </div>
+                  <h3 style={{
+                    color: "#39ff6a",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "8px",
+                    letterSpacing: "0.5px"
+                  }}>
+                    MARCADOR EXACTO
+                  </h3>
+                  <p style={{
+                    color: "#ffffff66",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.6",
+                    fontWeight: "500"
+                  }}>
+                    🎯 ¡Acertaste completamente! Ganador, diferencia y el marcador exacto al 100%.
+                  </p>
+                </div>
+              </div>
+
+              {/* TABLA RESUMEN */}
+              <div style={{
+                background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                border: "1px solid #39ff6a33",
+                borderRadius: "12px",
+                padding: "30px",
+                marginTop: "40px"
+              }}>
+                <h3 style={{
+                  color: "#39ff6a",
+                  fontSize: "1.2rem",
+                  fontWeight: "700",
+                  marginBottom: "24px",
+                  letterSpacing: "1px",
+                  textTransform: "uppercase"
+                }}>
+                  📊 Tabla Resumen
+                </h3>
+
+                <div style={{
+                  overflowX: "auto"
+                }}>
+                  <table style={{
+                    width: "100%",
+                    borderCollapse: "collapse"
+                  }}>
+                    <thead>
+                      <tr>
+                        <th style={{
+                          textAlign: "left",
+                          padding: "12px",
+                          borderBottom: "2px solid #39ff6a66",
+                          color: "#39ff6a",
+                          fontWeight: "700",
+                          fontSize: "0.9rem",
+                          letterSpacing: "1px"
+                        }}>
+                          TIPO DE ACIERTO
+                        </th>
+                        <th style={{
+                          textAlign: "center",
+                          padding: "12px",
+                          borderBottom: "2px solid #39ff6a66",
+                          color: "#39ff6a",
+                          fontWeight: "700",
+                          fontSize: "0.9rem",
+                          letterSpacing: "1px"
+                        }}>
+                          PUNTOS
+                        </th>
+                        <th style={{
+                          textAlign: "left",
+                          padding: "12px",
+                          borderBottom: "2px solid #39ff6a66",
+                          color: "#39ff6a",
+                          fontWeight: "700",
+                          fontSize: "0.9rem",
+                          letterSpacing: "1px"
+                        }}>
+                          DESCRIPCIÓN
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { tipo: "Sin Acierto", puntos: 0, desc: "Pronóstico incorrecto" },
+                        { tipo: "Resultado Correcto", puntos: 3, desc: "Ganador o clasificado correcto" },
+                        { tipo: "Empate Correcto", puntos: 5, desc: "Empate acertado sin importar goles" },
+                        { tipo: "Ganador + Diferencia", puntos: 7, desc: "Ganador y diferencia de goles exacta" },
+                        { tipo: "Marcador Exacto", puntos: 10, desc: "Resultado completamente correcto 🏆" }
+                      ].map((fila, idx) => (
+                        <tr key={idx} style={{
+                          borderBottom: "1px solid #ffffff11"
+                        }}>
+                          <td style={{
+                            padding: "14px 12px",
+                            color: "#ffffff",
+                            fontWeight: "600",
+                            fontSize: "0.95rem"
+                          }}>
+                            {fila.tipo}
+                          </td>
+                          <td style={{
+                            padding: "14px 12px",
+                            textAlign: "center",
+                            color: "#39ff6a",
+                            fontWeight: "900",
+                            fontSize: "1.1rem",
+                            textShadow: "0 0 8px #39ff6a55"
+                          }}>
+                            {fila.puntos}
+                          </td>
+                          <td style={{
+                            padding: "14px 12px",
+                            color: "#ffffff88",
+                            fontSize: "0.9rem"
+                          }}>
+                            {fila.desc}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECCIÓN: EJEMPLOS PRÁCTICOS */}
+              <div style={{
+                background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                border: "1px solid #39ff6a33",
+                borderRadius: "12px",
+                padding: "30px",
+                marginTop: "30px"
+              }}>
+                <h3 style={{
+                  color: "#39ff6a",
+                  fontSize: "1.2rem",
+                  fontWeight: "700",
+                  marginBottom: "24px",
+                  letterSpacing: "1px",
+                  textTransform: "uppercase"
+                }}>
+                  💡 Ejemplos Prácticos
+                </h3>
+
+                <div style={{ display: "grid", gap: "20px", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+                  
+                  {/* Ejemplo 1 */}
+                  <div style={{
+                    background: "#17212B",
+                    border: "1px solid #ffffff11",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    borderLeft: "4px solid #4a9eff"
+                  }}>
+                    <p style={{ color: "#ffffff", fontWeight: "700", fontSize: "0.95rem", marginBottom: "8px" }}>
+                      📌 <strong>Ejemplo 1:</strong> Resultado Correcto (3 pts)
+                    </p>
+                    <p style={{ color: "#ffffff88", fontSize: "0.85rem", lineHeight: "1.5", margin: "0" }}>
+                      <strong>Partido:</strong> México 2 - 1 Sudáfrica<br/>
+                      <strong>Tu pronóstico:</strong> México gana (cualquier marcador)<br/>
+                      <strong>Puntos:</strong> 3 ✅
+                    </p>
+                  </div>
+
+                  {/* Ejemplo 2 */}
+                  <div style={{
+                    background: "#17212B",
+                    border: "1px solid #ffffff11",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    borderLeft: "4px solid #ffd700"
+                  }}>
+                    <p style={{ color: "#ffffff", fontWeight: "700", fontSize: "0.95rem", marginBottom: "8px" }}>
+                      📌 <strong>Ejemplo 2:</strong> Empate Correcto (5 pts)
+                    </p>
+                    <p style={{ color: "#ffffff88", fontSize: "0.85rem", lineHeight: "1.5", margin: "0" }}>
+                      <strong>Partido:</strong> Brasil 1 - 1 Haití<br/>
+                      <strong>Tu pronóstico:</strong> Empate (1-1, 2-2, etc.)<br/>
+                      <strong>Puntos:</strong> 5 ✅
+                    </p>
+                  </div>
+
+                  {/* Ejemplo 3 */}
+                  <div style={{
+                    background: "#17212B",
+                    border: "1px solid #ffffff11",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    borderLeft: "4px solid #39ff6a"
+                  }}>
+                    <p style={{ color: "#ffffff", fontWeight: "700", fontSize: "0.95rem", marginBottom: "8px" }}>
+                      📌 <strong>Ejemplo 3:</strong> Marcador Exacto (10 pts)
+                    </p>
+                    <p style={{ color: "#ffffff88", fontSize: "0.85rem", lineHeight: "1.5", margin: "0" }}>
+                      <strong>Partido:</strong> Alemania 3 - 1 Curaçao<br/>
+                      <strong>Tu pronóstico:</strong> Alemania 3 - 1 Curaçao<br/>
+                      <strong>Puntos:</strong> 10 🏆
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* SECCIÓN: PREGUNTAS FRECUENTES */}
+              <div style={{
+                background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                border: "1px solid #39ff6a33",
+                borderRadius: "12px",
+                padding: "30px",
+                marginTop: "30px"
+              }}>
+                <h3 style={{
+                  color: "#39ff6a",
+                  fontSize: "1.2rem",
+                  fontWeight: "700",
+                  marginBottom: "24px",
+                  letterSpacing: "1px",
+                  textTransform: "uppercase"
+                }}>
+                  ❓ Preguntas Frecuentes
+                </h3>
+
+                <div style={{ display: "grid", gap: "16px" }}>
+                  
+                  {[
+                    {
+                      pregunta: "¿Qué pasa si un partido va a penales?",
+                      respuesta: "Los penales NO cuentan para tu pronóstico. Solo se toma en cuenta el resultado después de los 90' + tiempo extra. Por ejemplo, si México gana en penales pero Brasil ganaba 1-0 en tiempo extra, se cuenta como victoria de Brasil."
+                    },
+                    {
+                      pregunta: "¿Cuándo se cierra el plazo para pronosticar?",
+                      respuesta: "Las predicciones se cierran cuando comienza cada partido. Una vez que inicia el partido, no puedes cambiar tu pronóstico."
+                    },
+                    {
+                      pregunta: "¿Cómo se actualiza el ranking?",
+                      respuesta: "El ranking se actualiza en tiempo real conforme finaliza cada partido. Los puntos se suman automáticamente cuando se ingresa el resultado oficial."
+                    },
+                    {
+                      pregunta: "¿Puedo cambiar mis pronósticos?",
+                      respuesta: "Sí, puedes cambiar tus pronósticos antes de que el partido comience. Una vez que el partido inicia, tu pronóstico queda bloqueado."
+                    },
+                    {
+                      pregunta: "¿Qué pasa si hay empate de puntos en el primer lugar?",
+                      respuesta: "Si hay múltiples ganadores con la misma puntuación, el premio total se divide equitativamente entre todos."
+                    }
+                  ].map((faq, idx) => (
+                    <div key={idx} style={{
+                      background: "#17212B",
+                      border: "1px solid #ffffff11",
+                      borderRadius: "8px",
+                      padding: "16px"
+                    }}>
+                      <p style={{
+                        color: "#39ff6a",
+                        fontWeight: "700",
+                        fontSize: "0.95rem",
+                        marginBottom: "8px",
+                        margin: "0 0 8px 0"
+                      }}>
+                        {faq.pregunta}
+                      </p>
+                      <p style={{
+                        color: "#ffffff88",
+                        fontSize: "0.9rem",
+                        lineHeight: "1.6",
+                        margin: "0"
+                      }}>
+                        {faq.respuesta}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* NOTA FINAL */}
+              <div style={{
+                background: "#17212B",
+                border: "1px solid #39ff6a22",
+                borderRadius: "12px",
+                padding: "20px",
+                marginTop: "30px",
+                textAlign: "center"
+              }}>
+                <p style={{
+                  color: "#ffffff66",
+                  fontSize: "0.9rem",
+                  lineHeight: "1.6",
+                  fontWeight: "500"
+                }}>
+                  💡 <strong>Recuerda:</strong> Los puntos se suman progresivamente. ¡Buena suerte y que gane el mejor! 🎯
+                </p>
+              </div>
+
+            </div>
+          )}
 
           {tab === "tabla" && (
             <>
               <p className="grupo-titulo">🏆 Tabla de Posiciones</p>
               {tabla.length > 0 && (
-                <div style={{ background: "linear-gradient(145deg, #1e2d3d, #17212B)", border: "1px solid #ffd70033", borderRadius: "14px", padding: "28px 40px", marginBottom: "28px", textAlign: "center", boxShadow: "0 0 30px #ffd70011" }}>
-                  <p style={{ color: "#ffffff66", fontSize: "0.8rem", fontWeight: "700", letterSpacing: "2px", marginBottom: "12px" }}>💰 PREMIO TOTAL DEL TORNEO</p>
-                  <p style={{ color: "#ffd700", fontSize: "2.8rem", fontWeight: "900", letterSpacing: "2px", textShadow: "0 0 20px #ffd70088", marginBottom: "8px" }}>$ {(tabla.length * 10000).toLocaleString("es-CO")} COP</p>
-                  <p style={{ color: "#ffffff44", fontSize: "0.85rem", marginBottom: "16px" }}>{tabla.length} participante{tabla.length !== 1 ? "s" : ""} × $10.000 COP</p>
-                  <div style={{ background: "#ffd70011", border: "1px solid #ffd70033", borderRadius: "8px", padding: "10px 20px", display: "inline-block" }}>
-                    <p style={{ color: "#ffd700", fontSize: "0.85rem", fontWeight: "700", letterSpacing: "1px" }}>🏆 El jugador con más aciertos se lleva todo</p>
+                <div style={{ background: "linear-gradient(145deg, #1e2d3d, #17212B)", border: "1px solid #ffd70033", borderRadius: "14px", padding: "20px 16px", marginBottom: "28px", textAlign: "center", boxShadow: "0 0 30px #ffd70011" }}>
+                  <p style={{ color: "#ffffff66", fontSize: "0.7rem", fontWeight: "700", letterSpacing: "1px", marginBottom: "8px" }}>💰 PREMIO TOTAL</p>
+                  <p style={{ color: "#ffd700", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: "900", letterSpacing: "1px", textShadow: "0 0 20px #ffd70088", marginBottom: "6px" }}>$ {(tabla.length * 10000).toLocaleString("es-CO")} COP</p>
+                  <p style={{ color: "#ffffff44", fontSize: "0.75rem", marginBottom: "12px" }}>{tabla.length} participante{tabla.length !== 1 ? "s" : ""} × $10.000 COP</p>
+                  <div style={{ background: "#ffd70011", border: "1px solid #ffd70033", borderRadius: "6px", padding: "8px 12px", display: "inline-block" }}>
+                    <p style={{ color: "#ffd700", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.5px", margin: "0" }}>🏆 El que más aciertos se lleva todo</p>
                   </div>
                 </div>
               )}
@@ -893,6 +1853,45 @@ export default function App() {
                         <td>{fila.enviado ? "✅ Enviados" : "⏳ Pendiente"}</td>
                         <td><span className="badge-puntos">{fila.puntos} pts</span></td>
                         {torneoFinalizado() && <td><button className="btn-detalle" onClick={() => abrirModal(fila)}>👁️ Ver</button></td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+
+          {tab === "tabla-fase-final" && (
+            <>
+              <p className="grupo-titulo">🏆 Tabla Fase Final</p>
+              {tablaFaseFinal.length > 0 && (
+                <div style={{ background: "linear-gradient(145deg, #1e2d3d, #17212B)", border: "1px solid #ffd70033", borderRadius: "14px", padding: "20px 16px", marginBottom: "28px", textAlign: "center", boxShadow: "0 0 30px #ffd70011" }}>
+                  <p style={{ color: "#ffffff66", fontSize: "0.7rem", fontWeight: "700", letterSpacing: "1px", marginBottom: "8px" }}>💰 PREMIO TOTAL (FASE FINAL)</p>
+                  <p style={{ color: "#ffd700", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: "900", letterSpacing: "1px", textShadow: "0 0 20px #ffd70088", marginBottom: "6px" }}>$ {(tablaFaseFinal.length * 10000).toLocaleString("es-CO")} COP</p>
+                  <p style={{ color: "#ffffff44", fontSize: "0.75rem", marginBottom: "12px" }}>{tablaFaseFinal.length} participante{tablaFaseFinal.length !== 1 ? "s" : ""} × $10.000 COP</p>
+                  <div style={{ background: "#ffd70011", border: "1px solid #ffd70033", borderRadius: "6px", padding: "8px 12px", display: "inline-block" }}>
+                    <p style={{ color: "#ffd700", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.5px", margin: "0" }}>🏆 El que más aciertos en fase final se lleva todo</p>
+                  </div>
+                </div>
+              )}
+              {tablaFaseFinal.length === 0 ? (
+                <p style={{ color: "#ffffff44", textAlign: "center", marginTop: "40px" }}>Aún no hay participantes con pronósticos de fase final.</p>
+              ) : (
+                <table className="tabla">
+                  <thead>
+                    <tr>
+                      <th>#</th><th>PARTICIPANTE</th><th>PRONÓSTICOS</th><th>PUNTOS</th>
+                      {torneoFinalizado() && <th>DETALLE</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tablaFaseFinal.map((fila, i) => (
+                      <tr key={fila.uid} className={i === 0 ? "posicion-1" : i === 1 ? "posicion-2" : i === 2 ? "posicion-3" : ""}>
+                        <td>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
+                        <td>{fila.nombre}</td>
+                        <td>{fila.enviado ? "✅ Enviados" : "⏳ Pendiente"}</td>
+                        <td><span className="badge-puntos">{fila.puntos} pts</span></td>
+                        {torneoFinalizado() && <td><button className="btn-detalle" onClick={() => abrirModalFaseFinal(fila)}>👁️ Ver</button></td>}
                       </tr>
                     ))}
                   </tbody>
@@ -989,6 +1988,7 @@ export default function App() {
             <>
               <div style={{ display: "flex", gap: "0", marginBottom: "30px", borderBottom: "1px solid #ffd70022" }}>
                 <button onClick={() => setAdminTab("resultados")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>📋 RESULTADOS</button>
+                <button onClick={() => setAdminTab("resultados-r32")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-r32" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-r32" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🏅 RESULTADOS R32</button>
                 <button onClick={() => setAdminTab("usuarios")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "usuarios" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "usuarios" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>👥 USUARIOS</button>
               </div>
               {adminTab === "resultados" && (
@@ -997,6 +1997,68 @@ export default function App() {
                   {renderPartidos(grupoAdminActivo, true)}
                   <button className="btn-guardar" onClick={guardarResultados}>GUARDAR RESULTADOS</button>
                   {mensaje && <p className={mensaje.startsWith("✅") || mensaje.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>{mensaje}</p>}
+                </>
+              )}
+              {adminTab === "resultados-r32" && (
+                <>
+                  <p className="admin-titulo">🏅 Dieciseisavos — Resultados Reales</p>
+                  <div style={{ marginBottom: "20px" }}>
+                    <p style={{ color: "#ffd700", fontWeight: "700", marginBottom: "12px" }}>Ingresa los marcadores de los dieciseisavos:</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                      {PARTIDOS_R32.map(partido => (
+                        <div key={partido.id} style={{ background: "#17212B", border: "1px solid #ffd70033", borderRadius: "8px", padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.local}</span>
+                            </div>
+                            <span style={{ color: "#ffd700", fontSize: "0.75rem" }}>vs</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "flex-end" }}>
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.visitante}</span>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresR32?.[partido.id]?.local ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoLocal = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresR32((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], local: nuevoLocal },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                            <span style={{ color: "#ffd700", fontSize: "1.5rem", fontWeight: "900" }}>-</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresR32?.[partido.id]?.visitante ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresR32((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], visitante: nuevoVisitante },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-guardar" onClick={guardarResultadosR32}>GUARDAR RESULTADOS R32</button>
+                  {mensajeR32 && <p className={mensajeR32.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeR32}</p>}
                 </>
               )}
               {adminTab === "usuarios" && (
@@ -1058,6 +2120,52 @@ export default function App() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {modalUsuarioFaseFinal && torneoFinalizado() && (
+          <div className="modal-overlay" onClick={() => setModalUsuarioFaseFinal(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: "900px" }}>
+              <div className="modal-header">
+                <span className="modal-titulo">👤 Pronósticos Fase Final - {modalUsuarioFaseFinal.nombre}</span>
+                <button className="modal-cerrar" onClick={() => setModalUsuarioFaseFinal(null)}>✕</button>
+              </div>
+              <div style={{ padding: "20px 28px", overflow: "auto", maxHeight: "60vh" }}>
+                <div style={{ marginBottom: "20px", display: "flex", gap: "10px" }}>
+                  <button onClick={() => exportarExcel(modalUsuarioFaseFinal)} style={{ padding: "8px 16px", background: "#39ff6a", color: "#17212B", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer" }}>📊 Descargar Excel</button>
+                  <button onClick={() => exportarPDF(modalUsuarioFaseFinal)} style={{ padding: "8px 16px", background: "#ffd700", color: "#17212B", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer" }}>📄 Descargar PDF</button>
+                </div>
+                <table className="tabla" style={{ width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th>PARTIDO</th><th>MI PRONÓSTICO</th><th>RESULTADO</th><th>ESTADO</th><th>PUNTOS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PARTIDOS_R32.map(partido => {
+                      const pick = modalUsuarioFaseFinal.picks?.[partido.id]
+                      const marcador = marcadorFaseFinal[partido.id]
+                      const puntos = calcularPuntosR32(pick, marcador)
+                      return (
+                        <tr key={partido.id}>
+                          <td style={{ color: "#ffffff88" }}>{partido.local} vs {partido.visitante}</td>
+                          <td style={{ color: pick ? "#39ff6a" : "#ffffff33" }}>
+                            {pick && pick.local !== "" && pick.visitante !== "" ? `${pick.local}-${pick.visitante}` : "Sin pronóstico"}
+                          </td>
+                          <td style={{ color: marcador ? "#ffd700" : "#ffffff33" }}>
+                            {!marcador ? "⏳" : `${marcador.local || "-"}-${marcador.visitante || "-"}`}
+                          </td>
+                          <td>{!pick ? "—" : !marcador ? "⏳" : puntos > 0 ? "✅" : "❌"}</td>
+                          <td style={{ color: puntos === 10 ? "#ffd700" : puntos === 7 ? "#39ff6a" : puntos === 5 ? "#00aaff" : puntos === 3 ? "#ffffff88" : "#ff6b6b", fontWeight: "700" }}>
+                            {puntos} pts
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
