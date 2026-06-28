@@ -1,6 +1,9 @@
 
 
-const getGrupoDePartido = (partido) => partido.id.charAt(0)
+const getGrupoDePartido = (partido) => {
+  if (partido.id.charAt(0) === 'W') return 'R32'
+  return partido.id.charAt(0)
+}
 
 const esMismoDia = (a, b) =>
   a.getFullYear() === b.getFullYear() &&
@@ -46,7 +49,7 @@ export default function TickerBar({ partidos, marcadores, ahora, getEstadoPartid
         <span className="ticker-equipo">{partido.visitante}</span>
         <img loading="lazy" className="ticker-flag" src={`https://flagcdn.com/w20/${partido.flagVisitante}.png`} alt="" />
 
-        <span className="ticker-grupo">GRUPO {grupo}</span>
+        <span className="ticker-grupo">{grupo === 'R32' ? 'R32' : `GRUPO ${grupo}`}</span>
       </div>
     )
   }
@@ -54,8 +57,11 @@ export default function TickerBar({ partidos, marcadores, ahora, getEstadoPartid
   return (
     <div className="ticker-bar">
       <div className="ticker-track">
-        <div className="ticker-content">{partidosHoy.map((p, i) => renderItem(p, `a-${i}`))}</div>
-        <div className="ticker-content" aria-hidden="true">{partidosHoy.map((p, i) => renderItem(p, `b-${i}`))}</div>
+        {[...Array(4)].map((_, idx) => (
+          <div key={idx} className="ticker-content">
+            {partidosHoy.map((p, i) => renderItem(p, `${idx}-${i}`))}
+          </div>
+        ))}
       </div>
     </div>
   )

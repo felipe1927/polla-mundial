@@ -113,7 +113,7 @@ const GRUPOS = {
   ],
 }
 
-const TODOS_PARTIDOS = Object.values(GRUPOS).flat()
+const TODOS_PARTIDOS = [...Object.values(GRUPOS).flat(), ...PARTIDOS_R32]
 
   // Lista de partidos ordenada por fecha (datos estáticos, se ordena una vez)
   const sortedPartidos = [...TODOS_PARTIDOS].sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
@@ -851,7 +851,7 @@ export default function App() {
     .ticker-marcador { color: #FFD700; font-weight: 900; font-size: 1.05rem; letter-spacing: 1px; }
     .ticker-grupo { color: #f0f0f0; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
     .ticker-vacio { width: 100%; text-align: center; color: #ffffff44; font-size: 0.95rem; font-weight: 600; letter-spacing: 0.5px; }
-    @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-25%); } }
     @keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     .header { position: fixed; top: var(--ticker-h); left: 0; right: 0; z-index: 100; background: linear-gradient(90deg, #1e2d3d, #17212B); border-bottom: 1px solid #39ff6a33; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; }
     .header-titulo { color: #39ff6a; font-weight: 900; font-size: 1.2rem; letter-spacing: 1.5px; text-shadow: 0 0 10px #39ff6a66; }
