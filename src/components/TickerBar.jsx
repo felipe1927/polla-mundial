@@ -40,7 +40,7 @@ export default function TickerBar({ partidos, marcadores, ahora, getEstadoPartid
         <img loading="lazy" className="ticker-flag" src={`https://flagcdn.com/w20/${partido.flagLocal}.png`} alt="" />
         <span className="ticker-equipo">{partido.local}</span>
 
-        {(estado === "finalizado" || estado === "envivo") && marcadorListo ? (
+        {marcadorListo ? (
           <span className="ticker-marcador">{marc.local} - {marc.visitante}</span>
         ) : (
           <span className="ticker-vs">VS</span>

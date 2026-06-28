@@ -195,6 +195,7 @@ export default function App() {
       await cargarPronosticos(cred.user.uid)
       await cargarPronosticosR32(cred.user.uid)
       await cargarResultados()
+      await cargarResultadosR32()
       await cargarTablaFaseFinal()
       if (cred.user.email === ADMIN_EMAIL) setTab("admin")
     } catch (e) {
@@ -253,12 +254,28 @@ export default function App() {
   }
 
   const cargarTablaFaseFinal = async () => {
-    const snap = await getDocs(collection(db, "pronosticosR32"))
+    // Cargar pronósticos de R32
+    const pronSnap = await getDocs(collection(db, "pronosticosR32"))
+    
+    // Cargar resultados oficiales
+    const resSnap = await getDoc(doc(db, "resultadosR32", "oficial"))
+    const resultadosOficiales = resSnap.exists() ? resSnap.data().marcadores || {} : {}
+    
     const filas = []
-    snap.forEach(d => {
+    pronSnap.forEach(d => {
       const data = d.data()
       if (data.email === ADMIN_EMAIL) return
-      const puntos = data.puntajeR32 || 0 // Leer puntos precalculados
+      
+      // Calcular puntos en tiempo real basado en resultados actuales
+      const picks = data.picks || {}
+      let puntos = 0
+      
+      PARTIDOS_R32.forEach(p => {
+        if (picks[p.id] && resultadosOficiales[p.id]) {
+          puntos += calcularPuntosR32(picks[p.id], resultadosOficiales[p.id])
+        }
+      })
+      
       filas.push({ uid: d.id, email: data.email, nombre: getNombre(data.email), puntos, enviado: data.enviado, picks: data.picks })
     })
     filas.sort((a, b) => b.puntos - a.puntos)
@@ -369,8 +386,13 @@ export default function App() {
     }
     
     try {
+      // Cargar datos actuales para preservar puntajeR32
+      const docSnap = await getDoc(doc(db, "pronosticosR32", usuario.uid))
+      const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      
       const fecha = new Date().toISOString()
       await setDoc(doc(db, "pronosticosR32", usuario.uid), {
+        ...datosActuales,  // ← PRESERVAR DATOS ANTERIORES (incluyendo puntajeR32)
         email: usuario.email, 
         picks: pronosticosR32, 
         enviado: true, 
@@ -537,11 +559,12 @@ export default function App() {
   const cambiarTab = async (t) => {
     setTab(t)
     setMensaje("")
-    if (t === "tabla") await cargarTabla()
+    if (t === "tabla") { await cargarTabla(); await cargarResultadosR32() }
     if (t === "tabla-fase-final") await cargarTablaFaseFinal()
-    if (t === "grupos") await cargarGrupos()
+    if (t === "grupos") { await cargarGrupos(); await cargarResultadosR32() }
     if (t === "perfil") await cargarPerfil()
-    if (t === "admin") { await cargarResultados(); await cargarUsuariosAdmin() }
+    if (t === "pronosticos") { await cargarPronosticosR32(usuario.uid); await cargarResultadosR32() }
+    if (t === "admin") { await cargarResultados(); await cargarResultadosR32(); await cargarUsuariosAdmin() }
   }
 
   const abrirModal = async (fila) => {
@@ -554,7 +577,17 @@ export default function App() {
 
   const abrirModalFaseFinal = async (fila) => {
     const resSnap = await getDoc(doc(db, "resultadosR32", "oficial"))
-    const marcadores = resSnap.exists() ? resSnap.data().marcadores || {} : {}
+    let marcadores = resSnap.exists() ? resSnap.data().marcadores || {} : {}
+    
+    // Asegurar que todos los marcadores tienen la estructura correcta
+    marcadores = Object.entries(marcadores).reduce((acc, [id, marc]) => {
+      acc[id] = {
+        local: marc?.local ?? "",
+        visitante: marc?.visitante ?? ""
+      }
+      return acc
+    }, {})
+    
     setMarcadorFaseFinal(marcadores)
     setModalUsuarioFaseFinal(fila)
   }
@@ -851,7 +884,7 @@ export default function App() {
     .ticker-marcador { color: #FFD700; font-weight: 900; font-size: 1.05rem; letter-spacing: 1px; }
     .ticker-grupo { color: #f0f0f0; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }
     .ticker-vacio { width: 100%; text-align: center; color: #ffffff44; font-size: 0.95rem; font-weight: 600; letter-spacing: 0.5px; }
-    @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-25%); } }
+    @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
     @keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     .header { position: fixed; top: var(--ticker-h); left: 0; right: 0; z-index: 100; background: linear-gradient(90deg, #1e2d3d, #17212B); border-bottom: 1px solid #39ff6a33; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; }
     .header-titulo { color: #39ff6a; font-weight: 900; font-size: 1.2rem; letter-spacing: 1.5px; text-shadow: 0 0 10px #39ff6a66; }
@@ -1056,7 +1089,7 @@ export default function App() {
       <style>{STYLES}</style>
       <TickerBar
         partidos={TODOS_PARTIDOS}
-        marcadores={marcadores}
+        marcadores={{ ...marcadores, ...marcadoresR32 }}
         ahora={ahora}
         getEstadoPartido={getEstadoPartido}
         formatHora={formatHora}
@@ -1867,8 +1900,8 @@ export default function App() {
               {tablaFaseFinal.length > 0 && (
                 <div style={{ background: "linear-gradient(145deg, #1e2d3d, #17212B)", border: "1px solid #ffd70033", borderRadius: "14px", padding: "20px 16px", marginBottom: "28px", textAlign: "center", boxShadow: "0 0 30px #ffd70011" }}>
                   <p style={{ color: "#ffffff66", fontSize: "0.7rem", fontWeight: "700", letterSpacing: "1px", marginBottom: "8px" }}>💰 PREMIO TOTAL (FASE FINAL)</p>
-                  <p style={{ color: "#ffd700", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: "900", letterSpacing: "1px", textShadow: "0 0 20px #ffd70088", marginBottom: "6px" }}>$ {(tablaFaseFinal.length * 10000).toLocaleString("es-CO")} COP</p>
-                  <p style={{ color: "#ffffff44", fontSize: "0.75rem", marginBottom: "12px" }}>{tablaFaseFinal.length} participante{tablaFaseFinal.length !== 1 ? "s" : ""} × $10.000 COP</p>
+                  <p style={{ color: "#ffd700", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: "900", letterSpacing: "1px", textShadow: "0 0 20px #ffd70088", marginBottom: "6px" }}>$ {(tablaFaseFinal.length * 20000).toLocaleString("es-CO")} COP</p>
+                  <p style={{ color: "#ffffff44", fontSize: "0.75rem", marginBottom: "12px" }}>{tablaFaseFinal.length} participante{tablaFaseFinal.length !== 1 ? "s" : ""} × $20.000 COP</p>
                   <div style={{ background: "#ffd70011", border: "1px solid #ffd70033", borderRadius: "6px", padding: "8px 12px", display: "inline-block" }}>
                     <p style={{ color: "#ffd700", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.5px", margin: "0" }}>🏆 El que más aciertos en fase final se lleva todo</p>
                   </div>
@@ -2155,7 +2188,7 @@ export default function App() {
                             {pick && pick.local !== "" && pick.visitante !== "" ? `${pick.local}-${pick.visitante}` : "Sin pronóstico"}
                           </td>
                           <td style={{ color: marcador ? "#ffd700" : "#ffffff33" }}>
-                            {!marcador ? "⏳" : `${marcador.local || "-"}-${marcador.visitante || "-"}`}
+                            {!marcador ? "⏳" : `${marcador.local ?? "-"}-${marcador.visitante ?? "-"}`}
                           </td>
                           <td>{!pick ? "—" : !marcador ? "⏳" : puntos > 0 ? "✅" : "❌"}</td>
                           <td style={{ color: puntos === 10 ? "#ffd700" : puntos === 7 ? "#39ff6a" : puntos === 5 ? "#00aaff" : puntos === 3 ? "#ffffff88" : "#ff6b6b", fontWeight: "700" }}>
