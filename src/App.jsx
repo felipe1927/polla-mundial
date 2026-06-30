@@ -612,21 +612,27 @@ export default function App() {
     else if (marLocal < marVisitante) marResultado = "visitante"
     else marResultado = "empate"
     
-    // Si el resultado es diferente, 0 puntos
+    // Si el resultado es diferente, 0 puntos (Sin Acierto)
     if (pickResultado !== marResultado) return 0
     
-    // Si marcador exacto: 10 puntos
+    // Para empates acertados
+    if (pickResultado === "empate") {
+      // Empate exacto (mismo marcador): 7 puntos (Empate Exacto)
+      if (pickLocal === marLocal && pickVisitante === marVisitante) return 7
+      // Empate correcto pero goles diferentes: 5 puntos (Empate Correcto)
+      return 5
+    }
+    
+    // Para ganadores acertados
+    // Si marcador exacto: 10 puntos (Marcador Exacto con ganador)
     if (pickLocal === marLocal && pickVisitante === marVisitante) return 10
     
-    // Si es empate correcto: 5 puntos
-    if (pickResultado === "empate") return 5
-    
-    // Si ganador correcto y misma diferencia de gol: 7 puntos
+    // Si ganador correcto y misma diferencia de gol: 7 puntos (Ganador + Diferencia)
     const pickDiferencia = Math.abs(pickLocal - pickVisitante)
     const marDiferencia = Math.abs(marLocal - marVisitante)
     if (pickDiferencia === marDiferencia) return 7
     
-    // Si solo ganador correcto: 3 puntos
+    // Si solo ganador correcto: 3 puntos (Resultado Correcto)
     return 3
   }
 
@@ -1295,7 +1301,7 @@ export default function App() {
                     marginBottom: "12px",
                     lineHeight: "1.6"
                   }}>
-                    Predice el resultado de cada partido antes de que comience. Cuanto más precisa sea tu predicción, más puntos ganarás.
+                    Predice el resultado de cada partido 30 MINUTOS antes de que comience. Cuanto más precisa sea tu predicción, más puntos ganarás.
                   </p>
 
                   <p style={{
@@ -1464,7 +1470,7 @@ export default function App() {
                     lineHeight: "1.6",
                     fontWeight: "500"
                   }}>
-                    Acertaste que el partido terminaría en empate. Sin importar la cantidad de goles.
+                    Acertaste que el partido terminaría en empate. <strong>SIN</strong> importar la cantidad de goles.
                   </p>
                 </div>
 
@@ -1515,7 +1521,54 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* TARJETA 5 - 10 PUNTOS */}
+                {/* TARJETA 5 - 7 PUNTOS */}
+                <div style={{
+                  background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
+                  border: "2px solid #ffffff11",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  transition: "all 0.3s ease",
+                  cursor: "default",
+                  position: "relative",
+                  overflow: "hidden"
+                }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: "3px",
+                    background: "#39ff6a"
+                  }} />
+                  <div style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "900",
+                    color: "#39ff6a",
+                    marginBottom: "12px",
+                    textShadow: "0 0 12px #39ff6a77"
+                  }}>
+                    7
+                  </div>
+                  <h3 style={{
+                    color: "#ffffff",
+                    fontSize: "1.1rem",
+                    fontWeight: "700",
+                    marginBottom: "8px",
+                    letterSpacing: "0.5px"
+                  }}>
+                    EMPATE EXACTO 🎯
+                  </h3>
+                  <p style={{
+                    color: "#ffffff66",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.6",
+                    fontWeight: "500"
+                  }}>
+                    Acertaste que el partido terminaría en empate <strong>Y</strong> la cantidad exacta de goles anotados.
+                  </p>
+                </div>
+
+                {/* TARJETA 6 - 10 PUNTOS */}
                 <div style={{
                   background: "linear-gradient(135deg, #1e2d3d 0%, #17212B 100%)",
                   border: "2px solid #39ff6a44",
@@ -1647,6 +1700,7 @@ export default function App() {
                         { tipo: "Resultado Correcto", puntos: 3, desc: "Ganador o clasificado correcto" },
                         { tipo: "Empate Correcto", puntos: 5, desc: "Empate acertado sin importar goles" },
                         { tipo: "Ganador + Diferencia", puntos: 7, desc: "Ganador y diferencia de goles exacta" },
+                        { tipo: "Empate Exacto", puntos: 7, desc: "Empate acertado con marcador exacto" },
                         { tipo: "Marcador Exacto", puntos: 10, desc: "Resultado completamente correcto 🏆" }
                       ].map((fila, idx) => (
                         <tr key={idx} style={{
@@ -1736,7 +1790,7 @@ export default function App() {
                     </p>
                     <p style={{ color: "#ffffff88", fontSize: "0.85rem", lineHeight: "1.5", margin: "0" }}>
                       <strong>Partido:</strong> Brasil 1 - 1 Haití<br/>
-                      <strong>Tu pronóstico:</strong> Empate (1-1, 2-2, etc.)<br/>
+                      <strong>Tu pronóstico:</strong> Empate (2-2, 3-3, etc.)<br/>
                       <strong>Puntos:</strong> 5 ✅
                     </p>
                   </div>
@@ -1786,11 +1840,11 @@ export default function App() {
                   {[
                     {
                       pregunta: "¿Qué pasa si un partido va a penales?",
-                      respuesta: "Los penales NO cuentan para tu pronóstico. Solo se toma en cuenta el resultado después de los 90' + tiempo extra. Por ejemplo, si México gana en penales pero Brasil ganaba 1-0 en tiempo extra, se cuenta como victoria de Brasil."
+                      respuesta: "Los penales NO cuentan para tu pronóstico. Solo se toma en cuenta el resultado después de los 90' + tiempo extra."
                     },
                     {
                       pregunta: "¿Cuándo se cierra el plazo para pronosticar?",
-                      respuesta: "Las predicciones se cierran cuando comienza cada partido. Una vez que inicia el partido, no puedes cambiar tu pronóstico."
+                      respuesta: "Las predicciones se cierran 30 MINS ANTES de que comience cada partido. Una vez terminado este tiempo, no puedes cambiar tu pronóstico."
                     },
                     {
                       pregunta: "¿Cómo se actualiza el ranking?",
@@ -1798,7 +1852,7 @@ export default function App() {
                     },
                     {
                       pregunta: "¿Puedo cambiar mis pronósticos?",
-                      respuesta: "Sí, puedes cambiar tus pronósticos antes de que el partido comience. Una vez que el partido inicia, tu pronóstico queda bloqueado."
+                      respuesta: "Sí, puedes cambiar tus pronósticos siempre y cuando este en el tiempo permitido. Una vez falten 30 mins para el inicio del partido, tu pronóstico queda bloqueado."
                     },
                     {
                       pregunta: "¿Qué pasa si hay empate de puntos en el primer lugar?",
