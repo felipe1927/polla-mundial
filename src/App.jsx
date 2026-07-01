@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react"
-import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 
 import PartidoCard from "./components/PartidoCard"
 import PartidoCardR32 from "./components/PartidoCardR32"
+import PartidoCardR16 from "./components/PartidoCardR16"
 import TickerBar from "./components/TickerBar"
 import PARTIDOS_R32 from "./data/dieciseisavos"
+import PARTIDOS_R16 from "./data/octavos"
 import { auth, db } from "./firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "firebase/firestore"
@@ -127,7 +128,7 @@ export default function App() {
   const [pronosticos, setPronosticos] = useState({})
   const [enviado, setEnviado] = useState(false)
   const [fechaEnvio, setFechaEnvio] = useState(null)
-  const [tab, setTab] = useState("pronosticos")
+  const [tab, setTab] = useState("fase-final")
   const [grupoActivo, setGrupoActivo] = useState("A")
   const [tabla, setTabla] = useState([])
   const [tablaFaseFinal, setTablaFaseFinal] = useState([])
@@ -158,6 +159,15 @@ export default function App() {
   const [marcadoresR32, setMarcadoresR32] = useState({})
   const [mensajeR32, setMensajeR32] = useState("")
 
+  // === R16 (Octavos de Final) - completamente separado de R32 ===
+  const [pronosticosR16, setPronosticosR16] = useState({})
+  const [enviadoR16, setEnviadoR16] = useState(false)
+
+  const [resultadosR16, setResultadosR16] = useState({})
+  const [marcadoresR16, setMarcadoresR16] = useState({})
+  const [mensajeR16, setMensajeR16] = useState("")
+  const [guardadoR16, setGuardadoR16] = useState(false)
+
   useEffect(() => {
     const handleScroll = () => {
       const scrollActual = window.scrollY
@@ -175,6 +185,15 @@ export default function App() {
     const interval = setInterval(() => setAhora(new Date()), 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Cargar resultados cuando el usuario inicia sesión
+  useEffect(() => {
+    if (usuario) {
+      cargarResultados()
+      cargarResultadosR32()
+      cargarResultadosR16()
+    }
+  }, [usuario?.uid])
 
   const getNombre = (email) => {
     const u = email?.split("@")[0] || ""
@@ -194,8 +213,10 @@ export default function App() {
       setUsuario(cred.user)
       await cargarPronosticos(cred.user.uid)
       await cargarPronosticosR32(cred.user.uid)
+      await cargarPronosticosR16(cred.user.uid)
       await cargarResultados()
       await cargarResultadosR32()
+      await cargarResultadosR16()
       await cargarTablaFaseFinal()
       if (cred.user.email === ADMIN_EMAIL) setTab("admin")
     } catch (e) {
@@ -472,6 +493,128 @@ export default function App() {
     }
   }
 
+  // === R16 (Octavos) Functions ===
+  const cargarPronosticosR16 = async (uid) => {
+    const snap = await getDoc(doc(db, "pronosticosR16", uid))
+    if (snap.exists()) {
+      setPronosticosR16(snap.data().picks || {})
+      setEnviadoR16(snap.data().enviado || false)
+    }
+  }
+
+  const cargarResultadosR16 = async () => {
+    const snap = await getDoc(doc(db, "resultadosR16", "oficial"))
+    if (snap.exists()) {
+      setResultadosR16(snap.data().picks || {})
+      setMarcadoresR16(snap.data().marcadores || {})
+    }
+  }
+
+  const enviarPronosticosR16 = async () => {
+    if (Object.keys(pronosticosR16).length === 0) {
+      setMensajeR16("⚠️ Debes pronosticar al menos 1 partido antes de guardar.")
+      return
+    }
+    
+    // Validar que todos los pronósticos tengan AMBOS valores (local y visitante)
+    for (const [id, pronos] of Object.entries(pronosticosR16)) {
+      if (pronos.local === "" || pronos.local === undefined || pronos.visitante === "" || pronos.visitante === undefined) {
+        setMensajeR16("⚠️ Todos los pronósticos deben tener ambos marcadores (goles local y visitante).")
+        return
+      }
+    }
+    
+    try {
+      // Cargar datos actuales para preservar datos anteriores
+      const docSnap = await getDoc(doc(db, "pronosticosR16", usuario.uid))
+      const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      
+      const fecha = new Date().toISOString()
+      await setDoc(doc(db, "pronosticosR16", usuario.uid), {
+        ...datosActuales,
+        email: usuario.email, 
+        picks: pronosticosR16, 
+        enviado: true, 
+        fechaEnvio: fecha
+      })
+      setEnviadoR16(true)
+      setGuardadoR16(true)
+      setMensajeR16("✅ ¡Pronósticos guardados!")
+
+      // Vuelve al estado normal después de 2 segundos
+      setTimeout(() => {
+        setGuardadoR16(false)
+      }, 2000)
+    } catch (e) {
+      setMensajeR16("Error al guardar. Intenta de nuevo.")
+    }
+  }
+
+  const limpiarPronosticosR16 = async () => {
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos de Octavos?")) return
+    try {
+      await deleteDoc(doc(db, "pronosticosR16", usuario.uid))
+      setPronosticosR16({})
+      setEnviadoR16(false)
+      setMensajeR16("🗑️ Pronósticos de Octavos eliminados.")
+    } catch (e) {
+      setMensajeR16("Error al limpiar.")
+    }
+  }
+
+  const guardarResultadosR16 = async () => {
+    try {
+      // Guardar marcadores y picks reales
+      await setDoc(doc(db, "resultadosR16", "oficial"), {
+        picks: resultadosR16,
+        marcadores: marcadoresR16,
+        fechaActualizacion: new Date().toISOString()
+      })
+
+      // Calcular puntos de todos los usuarios
+      const snap = await getDocs(collection(db, "pronosticosR16"))
+      const actualizaciones = []
+
+      for (const d of snap.docs) {
+        const data = d.data()
+        if (data.email === ADMIN_EMAIL) continue
+
+        // Obtener puntaje de R32 que ya existe
+        const docR32 = await getDoc(doc(db, "pronosticosR32", d.id))
+        const puntajeR32 = docR32.data()?.puntajeR32 || 0
+
+        const picks = data.picks || {}
+        let puntajeR16 = 0
+
+        // Calcular puntos por cada partido
+        PARTIDOS_R16.forEach(p => {
+          if (picks[p.id] && marcadoresR16[p.id]) {
+            puntajeR16 += calcularPuntosR32(picks[p.id], marcadoresR16[p.id])
+          }
+        })
+
+        // Guardar puntos conservando puntajeR32 y sumando puntajeR16
+        actualizaciones.push(
+          setDoc(doc(db, "pronosticosR16", d.id), {
+            ...data,
+            puntajeR32: puntajeR32,
+            puntajeR16: puntajeR16,
+            puntajeTotal: puntajeR32 + puntajeR16
+          })
+        )
+      }
+
+      await Promise.all(actualizaciones)
+      setMensajeR16("✅ Resultados guardados y puntos calculados correctamente.")
+      
+      // Recargar tabla de fase final
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error(e)
+      setMensajeR16("Error al guardar resultados.")
+    }
+  }
+
   const seleccionar = useCallback((partidoId, opcion) => {
     if (enviado || torneoFinalizado()) return
     setPronosticos(prev => ({ ...prev, [partidoId]: opcion }))
@@ -563,7 +706,7 @@ export default function App() {
     if (t === "tabla-fase-final") await cargarTablaFaseFinal()
     if (t === "grupos") { await cargarGrupos(); await cargarResultadosR32() }
     if (t === "perfil") await cargarPerfil()
-    if (t === "pronosticos") { await cargarPronosticosR32(usuario.uid); await cargarResultadosR32() }
+    if (t === "pronosticos") { await cargarPronosticosR32(usuario.uid); await cargarResultadosR32(); await cargarPronosticosR16(usuario.uid); await cargarResultadosR16() }
     if (t === "admin") { await cargarResultados(); await cargarResultadosR32(); await cargarUsuariosAdmin() }
   }
 
@@ -636,50 +779,103 @@ export default function App() {
     return 3
   }
 
-  const exportarExcel = (usuario) => {
-    const datos = PARTIDOS_R32.map(p => ({
-      Partido: `${p.local} vs ${p.visitante}`,
-      "Mi Pronóstico": usuario.picks?.[p.id] ? `${usuario.picks[p.id].local || "-"}-${usuario.picks[p.id].visitante || "-"}` : "Sin pronóstico",
-      Resultado: marcadorFaseFinal[p.id] ? `${marcadorFaseFinal[p.id].local || "-"}-${marcadorFaseFinal[p.id].visitante || "-"}` : "Pendiente",
-      Estado: !usuario.picks?.[p.id] ? "—" : !marcadorFaseFinal[p.id] ? "⏳" : usuario.picks[p.id].local === marcadorFaseFinal[p.id].local && usuario.picks[p.id].visitante === marcadorFaseFinal[p.id].visitante ? "✅ Acierto" : "❌ Fallo"
-    }))
-    
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(datos)
-    XLSX.utils.book_append_sheet(wb, ws, "Fase Final")
-    XLSX.writeFile(wb, `Pronosticos_FaseFinal_${usuario.nombre}.xlsx`)
-  }
-
   const exportarPDF = (usuario) => {
     const doc = new jsPDF()
-    const datos = PARTIDOS_R32.map(p => [
-      `${p.local} vs ${p.visitante}`,
-      usuario.picks?.[p.id] ? `${usuario.picks[p.id].local || "-"}-${usuario.picks[p.id].visitante || "-"}` : "Sin pronóstico",
-      marcadorFaseFinal[p.id] ? `${marcadorFaseFinal[p.id].local || "-"}-${marcadorFaseFinal[p.id].visitante || "-"}` : "Pendiente",
-      !usuario.picks?.[p.id] ? "—" : !marcadorFaseFinal[p.id] ? "⏳" : usuario.picks[p.id].local === marcadorFaseFinal[p.id].local && usuario.picks[p.id].visitante === marcadorFaseFinal[p.id].visitante ? "✅" : "❌"
-    ])
     
     doc.setFontSize(16)
     doc.text(`Pronósticos Fase Final - ${usuario.nombre}`, 14, 15)
+    doc.setFontSize(10)
+    doc.setTextColor(100, 100, 100)
+    doc.text(`Descargado: ${new Date().toLocaleDateString("es-CO")}`, 14, 22)
     
-    let y = 30
-    const colWidths = [60, 50, 40, 30]
-    const headers = ["Partido", "Mi Pronóstico", "Resultado", "Estado"]
+    let y = 32
+    const colWidths = { partido: 45, pronostico: 35, resultado: 35, estado: 28, puntos: 20 }
+    const headers = ["Partido", "Mi Pronóstico", "Resultado", "Estado", "Pts"]
+    const colPositions = [14, 14 + colWidths.partido, 14 + colWidths.partido + colWidths.pronostico, 14 + colWidths.partido + colWidths.pronostico + colWidths.resultado, 14 + colWidths.partido + colWidths.pronostico + colWidths.resultado + colWidths.estado]
     
+    // Headers
     doc.setFontSize(10)
     doc.setTextColor(57, 255, 106)
+    doc.setFont(undefined, "bold")
     headers.forEach((h, i) => {
-      doc.text(h, 14 + colWidths.slice(0, i).reduce((a, b) => a + b, 0), y)
+      doc.text(h, colPositions[i], y)
     })
-    y += 10
     
+    // Línea separadora
+    y += 2
+    doc.setLineWidth(0.5)
+    doc.setDrawColor(57, 255, 106)
+    doc.line(14, y, 200, y)
+    y += 6
+    
+    // Datos
     doc.setTextColor(0, 0, 0)
-    doc.setFontSize(9)
-    datos.forEach(row => {
-      row.forEach((cell, i) => {
-        doc.text(cell, 14 + colWidths.slice(0, i).reduce((a, b) => a + b, 0), y)
-      })
-      y += 8
+    doc.setFont(undefined, "normal")
+    doc.setFontSize(8)
+    
+    PARTIDOS_R32.forEach(p => {
+      const pick = usuario.picks?.[p.id]
+      const marcador = marcadorFaseFinal[p.id]
+      
+      // Partido
+      doc.text(`${p.local} vs ${p.visitante}`, colPositions[0], y)
+      
+      // Mi Pronóstico
+      const pronosticoText = pick ? `${pick.local}-${pick.visitante}` : "—"
+      doc.text(pronosticoText, colPositions[1], y)
+      
+      // Resultado
+      const resultadoText = marcador ? `${marcador.local}-${marcador.visitante}` : "Pendiente"
+      doc.text(resultadoText, colPositions[2], y)
+      
+      // Estado y Puntos
+      let estado = "—"
+      let puntos = 0
+      
+      if (pick && marcador) {
+        puntos = calcularPuntosR32(pick, marcador)
+        if (puntos > 0) {
+          estado = "Ganada"
+        } else {
+          estado = "Perdida"
+        }
+      } else if (!pick) {
+        estado = "No pronóstico"
+      } else if (!marcador) {
+        estado = "Pendiente"
+      }
+      
+      // Establecer color según el estado
+      if (estado === "Ganada") {
+        doc.setTextColor(57, 255, 106) // Verde
+      } else if (estado === "Perdida") {
+        doc.setTextColor(255, 107, 107) // Rojo
+      } else {
+        doc.setTextColor(0, 0, 0) // Negro
+      }
+      doc.text(estado, colPositions[3], y)
+      
+      doc.setTextColor(0, 0, 0)
+      doc.text(puntos.toString(), colPositions[4], y)
+      
+      y += 7
+      
+      // Nueva página si se necesita
+      if (y > 270) {
+        doc.addPage()
+        y = 20
+        // Repetir headers en nueva página
+        doc.setFontSize(10)
+        doc.setTextColor(57, 255, 106)
+        doc.setFont(undefined, "bold")
+        headers.forEach((h, i) => {
+          doc.text(h, colPositions[i], y)
+        })
+        y += 8
+        doc.setTextColor(0, 0, 0)
+        doc.setFont(undefined, "normal")
+        doc.setFontSize(8)
+      }
     })
     
     doc.save(`Pronosticos_FaseFinal_${usuario.nombre}.pdf`)
@@ -1112,10 +1308,8 @@ export default function App() {
         </div>
 
         <div className="tabs">
-          {!isAdmin && <button className={`tab ${tab === "pronosticos" ? "activo" : ""}`} onClick={() => cambiarTab("pronosticos")}>📋 MIS PRONÓSTICOS</button>}
-          {!isAdmin && <button className={`tab ${tab === "fase-final" ? "activo" : ""}`} onClick={() => setTab("fase-final")}>🏅 FASE FINAL</button>}
           <button className={`tab ${tab === "grupos" ? "activo" : ""}`} onClick={() => cambiarTab("grupos")}>📊 GRUPOS</button>          
-          <button className={`tab ${tab === "tabla" ? "activo" : ""}`} onClick={() => cambiarTab("tabla")}>🏆 TABLA</button>
+          {!isAdmin && <button className={`tab ${tab === "fase-final" ? "activo" : ""}`} onClick={() => setTab("fase-final")}>🏅 FASE FINAL</button>}
           <button className={`tab ${tab === "tabla-fase-final" ? "activo" : ""}`} onClick={() => cambiarTab("tabla-fase-final")}>🏆 TABLA FASE FINAL</button>
           {!isAdmin && <button className={`tab ${tab === "perfil" ? "activo" : ""}`} onClick={() => cambiarTab("perfil")}>👤 MI PERFIL</button>}
           <button className={`tab ${tab === "reglas" ? "activo" : ""}`} onClick={() => cambiarTab("reglas")}>📖 REGLAS</button>
@@ -1178,7 +1372,7 @@ export default function App() {
 
           {tab === "fase-final" && (
             <>
-              {etapaFaseFinal !== "DIECISEISAVOS" && (
+              {etapaFaseFinal !== "DIECISEISAVOS" && etapaFaseFinal !== "OCTAVOS" && (
                 <p className="grupo-titulo" style={{ marginTop: "40px", textAlign: "center", color: "#ffffff44", fontSize: "0.9rem", fontWeight: "600" }}>
                   🛠️ Fase Final - PROXIMAMENTE
                 </p>
@@ -1243,6 +1437,71 @@ export default function App() {
                         🗑️ LIMPIAR MIS PRONÓSTICOS
                       </button>
                       {enviadoR32 && (
+                        <p className="msg-enviado" style={{ marginTop: "12px" }}>
+                          ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#ffffff44", textAlign: "center" }}>Haz pronósticos para poder guardarlos</p>
+                  )}
+                </>
+              )}
+
+              {etapaFaseFinal === "OCTAVOS" && (
+                <>
+                  <div style={{ marginBottom: "18px" }}>
+                    <div className="progreso-texto" style={{ textAlign: "right" }}>
+                      {PARTIDOS_R16.filter(p => pronosticosR16[p.id]?.local !== undefined && pronosticosR16[p.id]?.local !== "" && pronosticosR16[p.id]?.visitante !== undefined && pronosticosR16[p.id]?.visitante !== "").length}/{PARTIDOS_R16.length} partidos pronosticados
+                    </div>
+                    <div className="progreso-bar">
+                      <div
+                        className="progreso-fill"
+                        style={{ width: `${(PARTIDOS_R16.filter(p => pronosticosR16[p.id]?.local !== undefined && pronosticosR16[p.id]?.local !== "" && pronosticosR16[p.id]?.visitante !== undefined && pronosticosR16[p.id]?.visitante !== "").length / PARTIDOS_R16.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {PARTIDOS_R16.map((partido) => (
+                    <PartidoCardR16
+                      key={partido.id}
+                      partido={partido}
+                      esAdmin={false}
+                      marcadoresR16={marcadoresR16}
+                      pronosticosR16={pronosticosR16}
+                      setMarcadoresR16={setMarcadoresR16}
+                      setPronosticosR16={setPronosticosR16}
+                      enviadoR16={enviadoR16}
+                      r16Cerrado={torneoFinalizado()}
+                      tab="fase-final"
+                      renderEstadoPronostico={renderEstadoPronostico}
+                      renderEstado={renderEstado}
+                    />
+                  ))}
+
+                  {mensajeR16 && (
+                    <p className={mensajeR16.startsWith("✅") || mensajeR16.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>
+                      {mensajeR16}
+                    </p>
+                  )}
+
+                  {Object.keys(pronosticosR16).length > 0 ? (
+                    <>
+                      <button 
+                        className="btn-enviar" 
+                        onClick={enviarPronosticosR16}
+                        disabled={false}
+                        style={{
+                          opacity: false ? 0.5 : 1,
+                          cursor: false ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {guardadoR16 ? "✅ ¡GUARDADO!" : "💾 GUARDAR PRONÓSTICOS"}  
+                      </button>
+                      <button className="btn-limpiar" onClick={limpiarPronosticosR16}>
+                        🗑️ LIMPIAR MIS PRONÓSTICOS
+                      </button>
+                      {enviadoR16 && (
                         <p className="msg-enviado" style={{ marginTop: "12px" }}>
                           ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
                         </p>
@@ -2076,6 +2335,7 @@ export default function App() {
               <div style={{ display: "flex", gap: "0", marginBottom: "30px", borderBottom: "1px solid #ffd70022" }}>
                 <button onClick={() => setAdminTab("resultados")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>📋 RESULTADOS</button>
                 <button onClick={() => setAdminTab("resultados-r32")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-r32" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-r32" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🏅 RESULTADOS R32</button>
+                <button onClick={() => setAdminTab("resultados-r16")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-r16" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-r16" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🏆 RESULTADOS R16</button>
                 <button onClick={() => setAdminTab("usuarios")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "usuarios" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "usuarios" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>👥 USUARIOS</button>
               </div>
               {adminTab === "resultados" && (
@@ -2146,6 +2406,68 @@ export default function App() {
                   </div>
                   <button className="btn-guardar" onClick={guardarResultadosR32}>GUARDAR RESULTADOS R32</button>
                   {mensajeR32 && <p className={mensajeR32.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeR32}</p>}
+                </>
+              )}
+              {adminTab === "resultados-r16" && (
+                <>
+                  <p className="admin-titulo">🏆 Octavos de Final — Resultados Reales</p>
+                  <div style={{ marginBottom: "20px" }}>
+                    <p style={{ color: "#ffd700", fontWeight: "700", marginBottom: "12px" }}>Ingresa los marcadores de los Octavos de Final:</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                      {PARTIDOS_R16.map(partido => (
+                        <div key={partido.id} style={{ background: "#17212B", border: "1px solid #ffd70033", borderRadius: "8px", padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.local}</span>
+                            </div>
+                            <span style={{ color: "#ffd700", fontSize: "0.75rem" }}>vs</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "flex-end" }}>
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.visitante}</span>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresR16?.[partido.id]?.local ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoLocal = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresR16((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], local: nuevoLocal },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                            <span style={{ color: "#ffd700", fontSize: "1.5rem", fontWeight: "900" }}>-</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresR16?.[partido.id]?.visitante ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresR16((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], visitante: nuevoVisitante },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-guardar" onClick={guardarResultadosR16}>GUARDAR RESULTADOS R16</button>
+                  {mensajeR16 && <p className={mensajeR16.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeR16}</p>}
                 </>
               )}
               {adminTab === "usuarios" && (
@@ -2221,7 +2543,6 @@ export default function App() {
               </div>
               <div style={{ padding: "20px 28px", overflow: "auto", maxHeight: "60vh" }}>
                 <div style={{ marginBottom: "20px", display: "flex", gap: "10px" }}>
-                  <button onClick={() => exportarExcel(modalUsuarioFaseFinal)} style={{ padding: "8px 16px", background: "#39ff6a", color: "#17212B", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer" }}>📊 Descargar Excel</button>
                   <button onClick={() => exportarPDF(modalUsuarioFaseFinal)} style={{ padding: "8px 16px", background: "#ffd700", color: "#17212B", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer" }}>📄 Descargar PDF</button>
                 </div>
                 <table className="tabla" style={{ width: "100%" }}>
