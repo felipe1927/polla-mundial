@@ -8,7 +8,7 @@ import TickerBar from "./components/TickerBar"
 import PARTIDOS_R32 from "./data/dieciseisavos"
 import PARTIDOS_R16 from "./data/octavos"
 import { auth, db } from "./firebase"
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth"
+import { signInWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "firebase/firestore"
 
 const ADMIN_EMAIL = "admin@smurfitwestrock.co"
@@ -224,20 +224,6 @@ export default function App() {
       if (cred.user.email === ADMIN_EMAIL) setTab("admin")
     } catch (e) {
       setError("Correo o contraseña incorrectos")
-    }
-  }
-
-  const handleRegistro = async () => {
-    setError("")
-    if (!email.endsWith("@smurfitwestrock.co")) {
-      setError("Solo se permiten correos @smurfitwestrock.co")
-      return
-    }
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password)
-      setUsuario(cred.user)
-    } catch (e) {
-      setError("Error al registrarse. El correo ya puede estar en uso.")
     }
   }
 
@@ -1299,7 +1285,6 @@ export default function App() {
           {error && <p className="error">{error}</p>}
           <div style={{ display: "flex", gap: "16px", justifyContent: "center", marginTop: "10px" }}>
             <button className="btn" onClick={handleLogin}>INICIAR SESION</button>
-            <button className="btn" onClick={handleRegistro}>REGISTRARSE</button>
           </div>
         </div>
       </div>
