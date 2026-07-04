@@ -211,20 +211,42 @@ export default function App() {
       setError("Solo se permiten correos @smurfitwestrock.co")
       return
     }
+
+    // Paso 1: autenticación. Solo aquí puede fallar por credenciales incorrectas.
+    let cred
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password)
-      setUsuario(cred.user)
-      await cargarPronosticos(cred.user.uid)
-      await cargarPronosticosR32(cred.user.uid)
-      await cargarPronosticosR16(cred.user.uid)
-      await cargarResultados()
-      await cargarResultadosR32()
-      await cargarResultadosR16()
-      await cargarTablaFaseFinal()
-      if (cred.user.email === ADMIN_EMAIL) setTab("admin")
+      cred = await signInWithEmailAndPassword(auth, email, password)
     } catch (e) {
       setError("Correo o contraseña incorrectos")
+      return
     }
+
+    setUsuario(cred.user)
+
+    // Paso 2: carga de datos. Cada llamada es independiente (Promise.allSettled):
+    // si una falla (permiso momentáneo, red, etc.) las demás NO se cancelan,
+    // y jamás mostramos "credenciales incorrectas" por un fallo de carga
+    // (el login ya fue exitoso en el paso 1).
+    const resultadosCarga = await Promise.allSettled([
+      cargarPronosticos(cred.user.uid),
+      cargarPronosticosR32(cred.user.uid),
+      cargarPronosticosR16(cred.user.uid),
+      cargarResultados(),
+      cargarResultadosR32(),
+      cargarResultadosR16(),
+    ])
+
+    resultadosCarga.forEach((r) => {
+      if (r.status === "rejected") console.error("Error cargando datos tras el login:", r.reason)
+    })
+
+    try {
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error("Error cargando tabla de fase final:", e)
+    }
+
+    if (cred.user.email === ADMIN_EMAIL) setTab("admin")
   }
 
   const cargarPronosticos = async (uid) => {
@@ -264,30 +286,82 @@ export default function App() {
   }
 
   const cargarTablaFaseFinal = async () => {
-    // Cargar pronósticos de R32
-    const pronSnap = await getDocs(collection(db, "pronosticosR32"))
-    
-    // Cargar resultados oficiales
-    const resSnap = await getDoc(doc(db, "resultadosR32", "oficial"))
-    const resultadosOficiales = resSnap.exists() ? resSnap.data().marcadores || {} : {}
-    
-    const filas = []
-    pronSnap.forEach(d => {
+    // === R32 (Dieciseisavos) ===
+    const pronSnapR32 = await getDocs(collection(db, "pronosticosR32"))
+    const resSnapR32 = await getDoc(doc(db, "resultadosR32", "oficial"))
+    const marcadoresOficialesR32 = resSnapR32.exists() ? resSnapR32.data().marcadores || {} : {}
+
+    // === R16 (Octavos) ===
+    const pronSnapR16 = await getDocs(collection(db, "pronosticosR16"))
+    const resSnapR16 = await getDoc(doc(db, "resultadosR16", "oficial"))
+    const marcadoresOficialesR16 = resSnapR16.exists() ? resSnapR16.data().marcadores || {} : {}
+
+    // Mapa uid -> { puntosR16, enviadoR16 } calculado en tiempo real
+    const infoR16PorUid = {}
+    pronSnapR16.forEach(d => {
       const data = d.data()
       if (data.email === ADMIN_EMAIL) return
-      
-      // Calcular puntos en tiempo real basado en resultados actuales
       const picks = data.picks || {}
       let puntos = 0
-      
-      PARTIDOS_R32.forEach(p => {
-        if (picks[p.id] && resultadosOficiales[p.id]) {
-          puntos += calcularPuntosR32(picks[p.id], resultadosOficiales[p.id])
+      PARTIDOS_R16.forEach(p => {
+        if (picks[p.id] && marcadoresOficialesR16[p.id]) {
+          puntos += calcularPuntosR32(picks[p.id], marcadoresOficialesR16[p.id])
         }
       })
-      
-      filas.push({ uid: d.id, email: data.email, nombre: getNombre(data.email), puntos, enviado: data.enviado, picks: data.picks })
+      infoR16PorUid[d.id] = { puntos, enviado: data.enviado, picks: data.picks }
     })
+
+    const filas = []
+    const uidsVistos = new Set()
+
+    // Recorremos R32 (siempre existe primero) y sumamos lo que haya en R16
+    pronSnapR32.forEach(d => {
+      const data = d.data()
+      if (data.email === ADMIN_EMAIL) return
+
+      // Calcular puntos R32 en tiempo real basado en resultados actuales (nunca se pierde, se recalcula siempre)
+      const picks = data.picks || {}
+      let puntosR32 = 0
+      PARTIDOS_R32.forEach(p => {
+        if (picks[p.id] && marcadoresOficialesR32[p.id]) {
+          puntosR32 += calcularPuntosR32(picks[p.id], marcadoresOficialesR32[p.id])
+        }
+      })
+
+      const infoR16 = infoR16PorUid[d.id] || { puntos: 0 }
+
+      filas.push({
+        uid: d.id,
+        email: data.email,
+        nombre: getNombre(data.email),
+        puntos: puntosR32 + infoR16.puntos,
+        puntosR32,
+        puntosR16: infoR16.puntos,
+        enviado: data.enviado,
+        picks: data.picks
+      })
+      uidsVistos.add(d.id)
+    })
+
+    // Por si algún usuario tiene pronósticos de R16 pero no de R32 (caso raro, para no dejarlo fuera)
+    pronSnapR16.forEach(d => {
+      const data = d.data()
+      if (data.email === ADMIN_EMAIL) return
+      if (uidsVistos.has(d.id)) return
+
+      const infoR16 = infoR16PorUid[d.id] || { puntos: 0 }
+      filas.push({
+        uid: d.id,
+        email: data.email,
+        nombre: getNombre(data.email),
+        puntos: infoR16.puntos,
+        puntosR32: 0,
+        puntosR16: infoR16.puntos,
+        enviado: data.enviado,
+        picks: data.picks
+      })
+    })
+
     filas.sort((a, b) => b.puntos - a.puntos)
     setTablaFaseFinal(filas)
   }
@@ -396,18 +470,24 @@ export default function App() {
     }
     
     try {
-      // Cargar datos actuales para preservar puntajeR32
+      // Cargar datos actuales para preservar puntajeR32 Y los picks ya guardados
       const docSnap = await getDoc(doc(db, "pronosticosR32", usuario.uid))
       const datosActuales = docSnap.exists() ? docSnap.data() : {}
-      
+      const picksActuales = datosActuales.picks || {}
+
+      // Fusionar: lo que ya estaba guardado + lo que hay en el estado local ahora mismo.
+      // Así nunca se borra un partido que ya se había guardado antes.
+      const picksFusionados = { ...picksActuales, ...pronosticosR32 }
+
       const fecha = new Date().toISOString()
       await setDoc(doc(db, "pronosticosR32", usuario.uid), {
         ...datosActuales,  // ← PRESERVAR DATOS ANTERIORES (incluyendo puntajeR32)
         email: usuario.email, 
-        picks: pronosticosR32, 
+        picks: picksFusionados, 
         enviado: true, 
         fechaEnvio: fecha
       })
+      setPronosticosR32(picksFusionados) // sincroniza el estado local con lo realmente guardado
       setEnviadoR32(true)
       setGuardadoR32(true)
       setMensajeR32("✅ ¡Pronósticos guardados!")
@@ -514,18 +594,24 @@ export default function App() {
     }
     
     try {
-      // Cargar datos actuales para preservar datos anteriores
+      // Cargar datos actuales para preservar datos anteriores (incluyendo picks ya guardados)
       const docSnap = await getDoc(doc(db, "pronosticosR16", usuario.uid))
       const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      const picksActuales = datosActuales.picks || {}
+
+      // Fusionar: lo que ya estaba guardado + lo que hay en el estado local ahora mismo.
+      // Así nunca se borra un partido que ya se había guardado antes.
+      const picksFusionados = { ...picksActuales, ...pronosticosR16 }
       
       const fecha = new Date().toISOString()
       await setDoc(doc(db, "pronosticosR16", usuario.uid), {
         ...datosActuales,
         email: usuario.email, 
-        picks: pronosticosR16, 
+        picks: picksFusionados, 
         enviado: true, 
         fechaEnvio: fecha
       })
+      setPronosticosR16(picksFusionados) // sincroniza el estado local con lo realmente guardado
       setEnviadoR16(true)
       setGuardadoR16(true)
       setMensajeR16("✅ ¡Pronósticos guardados!")
@@ -564,34 +650,28 @@ export default function App() {
       const snap = await getDocs(collection(db, "pronosticosR16"))
       const actualizaciones = []
 
-      for (const d of snap.docs) {
+      snap.forEach(d => {
         const data = d.data()
-        if (data.email === ADMIN_EMAIL) continue
-
-        // Obtener puntaje de R32 que ya existe
-        const docR32 = await getDoc(doc(db, "pronosticosR32", d.id))
-        const puntajeR32 = docR32.data()?.puntajeR32 || 0
+        if (data.email === ADMIN_EMAIL) return
 
         const picks = data.picks || {}
-        let puntajeR16 = 0
+        let puntajeTotal = 0
 
         // Calcular puntos por cada partido
         PARTIDOS_R16.forEach(p => {
           if (picks[p.id] && marcadoresR16[p.id]) {
-            puntajeR16 += calcularPuntosR32(picks[p.id], marcadoresR16[p.id])
+            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresR16[p.id])
           }
         })
 
-        // Guardar puntos conservando puntajeR32 y sumando puntajeR16
+        // Guardar puntos en el documento del usuario
         actualizaciones.push(
           setDoc(doc(db, "pronosticosR16", d.id), {
             ...data,
-            puntajeR32: puntajeR32,
-            puntajeR16: puntajeR16,
-            puntajeTotal: puntajeR32 + puntajeR16
+            puntajeR16: puntajeTotal
           })
         )
-      }
+      })
 
       await Promise.all(actualizaciones)
       setMensajeR16("✅ Resultados guardados y puntos calculados correctamente.")
@@ -679,6 +759,9 @@ export default function App() {
     setPronosticosR32({})
     setEnviadoR32(false)
     setMensajeR32("")
+    setPronosticosR16({})
+    setEnviadoR16(false)
+    setMensajeR16("")
     setTab("pronosticos")
     setTabla([])
     setTablaFaseFinal([])
@@ -2108,7 +2191,7 @@ export default function App() {
                     },
                     {
                       pregunta: "¿Cuándo se cierra el plazo para pronosticar?",
-                      respuesta: "Las predicciones se cierran 30 MINS ANTES de que comience cada partido. Una vez terminado este tiempo, no puedes cambiar tu pronóstico."
+                      respuesta: "Las predicciones se cierran 5 MINS ANTES de que comience cada partido. Una vez terminado este tiempo, no puedes cambiar tu pronóstico."
                     },
                     {
                       pregunta: "¿Cómo se actualiza el ranking?",
@@ -2116,7 +2199,7 @@ export default function App() {
                     },
                     {
                       pregunta: "¿Puedo cambiar mis pronósticos?",
-                      respuesta: "Sí, puedes cambiar tus pronósticos siempre y cuando este en el tiempo permitido. Una vez falten 30 mins para el inicio del partido, tu pronóstico queda bloqueado."
+                      respuesta: "Sí, puedes cambiar tus pronósticos siempre y cuando este en el tiempo permitido. Una vez falten 5 mins para el inicio del partido, tu pronóstico queda bloqueado."
                     },
                     {
                       pregunta: "¿Qué pasa si hay empate de puntos en el primer lugar?",
@@ -2218,10 +2301,10 @@ export default function App() {
               {tablaFaseFinal.length > 0 && (
                 <div style={{ background: "linear-gradient(145deg, #1e2d3d, #17212B)", border: "1px solid #ffd70033", borderRadius: "14px", padding: "20px 16px", marginBottom: "28px", textAlign: "center", boxShadow: "0 0 30px #ffd70011" }}>
                   <p style={{ color: "#ffffff66", fontSize: "0.7rem", fontWeight: "700", letterSpacing: "1px", marginBottom: "8px" }}>💰 PREMIO TOTAL (FASE FINAL)</p>
-                  <p style={{ color: "#ffd700", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: "900", letterSpacing: "1px", textShadow: "0 0 20px #ffd70088", marginBottom: "6px" }}>$ {(tablaFaseFinal.length * 20000).toLocaleString("es-CO")} COP</p>
-                  <p style={{ color: "#ffffff44", fontSize: "0.75rem", marginBottom: "12px" }}>{tablaFaseFinal.length} participante{tablaFaseFinal.length !== 1 ? "s" : ""} × $20.000 COP</p>
+                  <p style={{ color: "#ffd700", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: "900", letterSpacing: "1px", textShadow: "0 0 20px #ffd70088", marginBottom: "6px" }}>$ {(tablaFaseFinal.length * 20000 + 20000).toLocaleString("es-CO")} COP</p>
+                  <p style={{ color: "#ffffff44", fontSize: "0.75rem", marginBottom: "12px" }}>{tablaFaseFinal.length} participante{tablaFaseFinal.length !== 1 ? "s" : ""} × $20.000 COP + $20.000 COP Bonus</p>
                   <div style={{ background: "#ffd70011", border: "1px solid #ffd70033", borderRadius: "6px", padding: "8px 12px", display: "inline-block" }}>
-                    <p style={{ color: "#ffd700", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.5px", margin: "0" }}>🏆 El que más aciertos en fase final se lleva todo</p>
+                    <p style={{ color: "#ffd700", fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.5px", margin: "0" }}>🏆 El que más aciertos tenga en fase final se lleva todo</p>
                   </div>
                 </div>
               )}
