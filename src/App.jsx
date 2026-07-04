@@ -141,6 +141,9 @@ export default function App() {
   const [detalleData, setDetalleData] = useState({})
   const [detalleFaseFinal, setDetalleFaseFinal] = useState({})
   const [marcadorFaseFinal, setMarcadorFaseFinal] = useState({})
+  const [marcadorFaseFinalR16, setMarcadorFaseFinalR16] = useState({})
+  const [picksFaseFinalR16, setPicksFaseFinalR16] = useState({})
+  const [modalFaseFinalEtapa, setModalFaseFinalEtapa] = useState("R32")
   const [modalUsuario, setModalUsuario] = useState(null)
   const [modalUsuarioFaseFinal, setModalUsuarioFaseFinal] = useState(null)
   const [modalGrupo, setModalGrupo] = useState("A")
@@ -706,7 +709,7 @@ export default function App() {
     if (t === "tabla-fase-final") await cargarTablaFaseFinal()
     if (t === "grupos") { await cargarGrupos(); await cargarResultadosR32() }
     if (t === "perfil") await cargarPerfil()
-    if (t === "pronosticos") { await cargarPronosticosR32(usuario.uid); await cargarResultadosR32(); await cargarPronosticosR16(usuario.uid); await cargarResultadosR16() }
+    if (t === "pronosticos") { await cargarResultadosR32(); await cargarResultadosR16() }
     if (t === "admin") { await cargarResultados(); await cargarResultadosR32(); await cargarUsuariosAdmin() }
   }
 
@@ -731,7 +734,25 @@ export default function App() {
       return acc
     }, {})
     
+    // Cargar resultados oficiales de R16 (octavos)
+    const resSnapR16 = await getDoc(doc(db, "resultadosR16", "oficial"))
+    let marcadoresR16Data = resSnapR16.exists() ? resSnapR16.data().marcadores || {} : {}
+    marcadoresR16Data = Object.entries(marcadoresR16Data).reduce((acc, [id, marc]) => {
+      acc[id] = {
+        local: marc?.local ?? "",
+        visitante: marc?.visitante ?? ""
+      }
+      return acc
+    }, {})
+
+    // Cargar los pronósticos de R16 de este usuario en particular
+    const pronR16Snap = await getDoc(doc(db, "pronosticosR16", fila.uid))
+    const picksR16 = pronR16Snap.exists() ? pronR16Snap.data().picks || {} : {}
+
     setMarcadorFaseFinal(marcadores)
+    setMarcadorFaseFinalR16(marcadoresR16Data)
+    setPicksFaseFinalR16(picksR16)
+    setModalFaseFinalEtapa("R32")
     setModalUsuarioFaseFinal(fila)
   }
 
@@ -792,92 +813,91 @@ export default function App() {
     const colWidths = { partido: 45, pronostico: 35, resultado: 35, estado: 28, puntos: 20 }
     const headers = ["Partido", "Mi Pronóstico", "Resultado", "Estado", "Pts"]
     const colPositions = [14, 14 + colWidths.partido, 14 + colWidths.partido + colWidths.pronostico, 14 + colWidths.partido + colWidths.pronostico + colWidths.resultado, 14 + colWidths.partido + colWidths.pronostico + colWidths.resultado + colWidths.estado]
-    
-    // Headers
-    doc.setFontSize(10)
-    doc.setTextColor(57, 255, 106)
-    doc.setFont(undefined, "bold")
-    headers.forEach((h, i) => {
-      doc.text(h, colPositions[i], y)
-    })
-    
-    // Línea separadora
-    y += 2
-    doc.setLineWidth(0.5)
-    doc.setDrawColor(57, 255, 106)
-    doc.line(14, y, 200, y)
-    y += 6
-    
-    // Datos
-    doc.setTextColor(0, 0, 0)
-    doc.setFont(undefined, "normal")
-    doc.setFontSize(8)
-    
-    PARTIDOS_R32.forEach(p => {
-      const pick = usuario.picks?.[p.id]
-      const marcador = marcadorFaseFinal[p.id]
-      
-      // Partido
-      doc.text(`${p.local} vs ${p.visitante}`, colPositions[0], y)
-      
-      // Mi Pronóstico
-      const pronosticoText = pick ? `${pick.local}-${pick.visitante}` : "—"
-      doc.text(pronosticoText, colPositions[1], y)
-      
-      // Resultado
-      const resultadoText = marcador ? `${marcador.local}-${marcador.visitante}` : "Pendiente"
-      doc.text(resultadoText, colPositions[2], y)
-      
-      // Estado y Puntos
-      let estado = "—"
-      let puntos = 0
-      
-      if (pick && marcador) {
-        puntos = calcularPuntosR32(pick, marcador)
-        if (puntos > 0) {
-          estado = "Ganada"
-        } else {
-          estado = "Perdida"
-        }
-      } else if (!pick) {
-        estado = "No pronóstico"
-      } else if (!marcador) {
-        estado = "Pendiente"
-      }
-      
-      // Establecer color según el estado
-      if (estado === "Ganada") {
-        doc.setTextColor(57, 255, 106) // Verde
-      } else if (estado === "Perdida") {
-        doc.setTextColor(255, 107, 107) // Rojo
-      } else {
-        doc.setTextColor(0, 0, 0) // Negro
-      }
-      doc.text(estado, colPositions[3], y)
-      
+
+    const dibujarHeaders = () => {
+      doc.setFontSize(10)
+      doc.setTextColor(57, 255, 106)
+      doc.setFont(undefined, "bold")
+      headers.forEach((h, i) => {
+        doc.text(h, colPositions[i], y)
+      })
+      y += 2
+      doc.setLineWidth(0.5)
+      doc.setDrawColor(57, 255, 106)
+      doc.line(14, y, 200, y)
+      y += 6
       doc.setTextColor(0, 0, 0)
-      doc.text(puntos.toString(), colPositions[4], y)
-      
-      y += 7
-      
-      // Nueva página si se necesita
-      if (y > 270) {
-        doc.addPage()
-        y = 20
-        // Repetir headers en nueva página
-        doc.setFontSize(10)
-        doc.setTextColor(57, 255, 106)
-        doc.setFont(undefined, "bold")
-        headers.forEach((h, i) => {
-          doc.text(h, colPositions[i], y)
-        })
-        y += 8
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(8)
+    }
+
+    const dibujarSeccion = (titulo, partidos, picks, marcadores) => {
+      // Título de la etapa
+      doc.setFontSize(12)
+      doc.setTextColor(255, 215, 0)
+      doc.setFont(undefined, "bold")
+      doc.text(titulo, 14, y)
+      y += 8
+
+      dibujarHeaders()
+
+      partidos.forEach(p => {
+        const pick = picks?.[p.id]
+        const marcador = marcadores[p.id]
+
+        doc.text(`${p.local} vs ${p.visitante}`, colPositions[0], y)
+
+        const pronosticoText = pick && pick.local !== "" && pick.visitante !== "" ? `${pick.local}-${pick.visitante}` : "—"
+        doc.text(pronosticoText, colPositions[1], y)
+
+        const resultadoText = marcador && marcador.local !== "" ? `${marcador.local}-${marcador.visitante}` : "Pendiente"
+        doc.text(resultadoText, colPositions[2], y)
+
+        let estado = "—"
+        let puntos = 0
+
+        if (pick && marcador && marcador.local !== "") {
+          puntos = calcularPuntosR32(pick, marcador)
+          estado = puntos > 0 ? "Ganada" : "Perdida"
+        } else if (!pick) {
+          estado = "No pronóstico"
+        } else {
+          estado = "Pendiente"
+        }
+
+        if (estado === "Ganada") {
+          doc.setTextColor(57, 255, 106)
+        } else if (estado === "Perdida") {
+          doc.setTextColor(255, 107, 107)
+        } else {
+          doc.setTextColor(0, 0, 0)
+        }
+        doc.text(estado, colPositions[3], y)
+
         doc.setTextColor(0, 0, 0)
-        doc.setFont(undefined, "normal")
-        doc.setFontSize(8)
-      }
-    })
-    
+        doc.text(puntos.toString(), colPositions[4], y)
+
+        y += 7
+
+        if (y > 270) {
+          doc.addPage()
+          y = 20
+          dibujarHeaders()
+        }
+      })
+
+      y += 6
+    }
+
+    dibujarSeccion("DIECISEISAVOS (R32)", PARTIDOS_R32, usuario.picks, marcadorFaseFinal)
+
+    if (y > 250) {
+      doc.addPage()
+      y = 20
+    }
+
+    dibujarSeccion("OCTAVOS (R16)", PARTIDOS_R16, picksFaseFinalR16, marcadorFaseFinalR16)
+
     doc.save(`Pronosticos_FaseFinal_${usuario.nombre}.pdf`)
   }
 
@@ -2541,6 +2561,10 @@ export default function App() {
                 <span className="modal-titulo">👤 Pronósticos Fase Final - {modalUsuarioFaseFinal.nombre}</span>
                 <button className="modal-cerrar" onClick={() => setModalUsuarioFaseFinal(null)}>✕</button>
               </div>
+              <div className="modal-grupos">
+                <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "R32" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("R32")}>🏁 DIECISEISAVOS (R32)</button>
+                <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "R16" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("R16")}>⚽ OCTAVOS (R16)</button>
+              </div>
               <div style={{ padding: "20px 28px", overflow: "auto", maxHeight: "60vh" }}>
                 <div style={{ marginBottom: "20px", display: "flex", gap: "10px" }}>
                   <button onClick={() => exportarPDF(modalUsuarioFaseFinal)} style={{ padding: "8px 16px", background: "#ffd700", color: "#17212B", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer" }}>📄 Descargar PDF</button>
@@ -2552,9 +2576,9 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {PARTIDOS_R32.map(partido => {
-                      const pick = modalUsuarioFaseFinal.picks?.[partido.id]
-                      const marcador = marcadorFaseFinal[partido.id]
+                    {(modalFaseFinalEtapa === "R32" ? PARTIDOS_R32 : PARTIDOS_R16).map(partido => {
+                      const pick = modalFaseFinalEtapa === "R32" ? modalUsuarioFaseFinal.picks?.[partido.id] : picksFaseFinalR16?.[partido.id]
+                      const marcador = modalFaseFinalEtapa === "R32" ? marcadorFaseFinal[partido.id] : marcadorFaseFinalR16[partido.id]
                       const puntos = calcularPuntosR32(pick, marcador)
                       return (
                         <tr key={partido.id}>

@@ -12,34 +12,15 @@ function PartidoCardR16({
   renderEstadoPronostico,
   renderEstado,
 }) {
-  const [pronosticoLocal, setPronosticoLocal] = React.useState(pronosticosR16?.[partido.id]?.local ?? "")
-  const [pronosticoVisitante, setPronosticoVisitante] = React.useState(pronosticosR16?.[partido.id]?.visitante ?? "")
-  
-  // Actualizar inputs cuando carga pronosticosR16 desde Firebase
-  React.useEffect(() => {
-    setPronosticoLocal(pronosticosR16?.[partido.id]?.local ?? "")
-    setPronosticoVisitante(pronosticosR16?.[partido.id]?.visitante ?? "")
-  }, [pronosticosR16, partido.id])
-  
-  // Guardar en pronosticosR16 SOLO cuando AMBOS campos tienen valor
-  React.useEffect(() => {
-    if (pronosticoLocal !== "" && pronosticoVisitante !== "") {
-      setPronosticosR16((prev) => ({
-        ...prev,
-        [partido.id]: {
-          local: pronosticoLocal,
-          visitante: pronosticoVisitante,
-        },
-      }))
-    }
-  }, [pronosticoLocal, pronosticoVisitante, partido.id, setPronosticosR16])
-  
-  const pick = { local: pronosticoLocal, visitante: pronosticoVisitante }
+  // pronosticosR16 (prop del padre) es la única fuente de verdad.
+  // Los inputs leen y escriben directamente ahí, sin estado local intermedio,
+  // para que nunca se pierda lo que el usuario ya escribió (incluso si está incompleto).
+  const pick = pronosticosR16?.[partido.id] ?? { local: "", visitante: "" }
 
   // Lógica para estados (PROXIMAMENTE, EN VIVO, etc)
   const ahora = new Date()
   const fechaPartido = new Date(partido.hora)
-  const fechaLimitePronostico = new Date(fechaPartido.getTime() - 30 * 60000) // 30 mins antes
+  const fechaLimitePronostico = new Date(fechaPartido.getTime() - 5 * 60000) // 30 mins antes
   const tiempoRestante = fechaPartido - ahora
   const minutosRestantes = Math.floor(tiempoRestante / 60000)
   
@@ -69,14 +50,20 @@ function PartidoCardR16({
     const val = e.target.value.replace(/[^0-9]/g, "")
     if (!puedePronosticar) return
     const nuevoLocal = val === "" ? "" : parseInt(val, 10)
-    setPronosticoLocal(nuevoLocal)
+    setPronosticosR16((prev) => ({
+      ...prev,
+      [partido.id]: { ...prev?.[partido.id], local: nuevoLocal, visitante: prev?.[partido.id]?.visitante ?? "" },
+    }))
   }
 
   const handleVisitanteChange = (e) => {
     const val = e.target.value.replace(/[^0-9]/g, "")
     if (!puedePronosticar) return
     const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
-    setPronosticoVisitante(nuevoVisitante)
+    setPronosticosR16((prev) => ({
+      ...prev,
+      [partido.id]: { ...prev?.[partido.id], local: prev?.[partido.id]?.local ?? "", visitante: nuevoVisitante },
+    }))
   }
 
   const handleAdminLocalChange = (e) => {
