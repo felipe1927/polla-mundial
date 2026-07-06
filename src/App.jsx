@@ -4,9 +4,17 @@ import { jsPDF } from 'jspdf'
 import PartidoCard from "./components/PartidoCard"
 import PartidoCardR32 from "./components/PartidoCardR32"
 import PartidoCardR16 from "./components/PartidoCardR16"
+import PartidoCardQF from "./components/PartidoCardQF"
+import PartidoCardSF from "./components/PartidoCardSF"
 import TickerBar from "./components/TickerBar"
 import PARTIDOS_R32 from "./data/dieciseisavos"
 import PARTIDOS_R16 from "./data/octavos"
+import PARTIDOS_QF from "./data/cuartos"
+import PARTIDOS_SF from "./data/semis"
+import PartidoCardBF from "./components/PartidoCardBF"
+import PartidoCardFinal from "./components/PartidoCardFINAL"
+import PARTIDOS_BF from "./data/tercer"
+import PARTIDOS_FINAL from "./data/final"
 import { auth, db } from "./firebase"
 import { signInWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, getDoc, getDocs, deleteDoc, collection } from "firebase/firestore"
@@ -143,6 +151,14 @@ export default function App() {
   const [marcadorFaseFinal, setMarcadorFaseFinal] = useState({})
   const [marcadorFaseFinalR16, setMarcadorFaseFinalR16] = useState({})
   const [picksFaseFinalR16, setPicksFaseFinalR16] = useState({})
+  const [marcadorFaseFinalQF, setMarcadorFaseFinalQF] = useState({})
+  const [picksFaseFinalQF, setPicksFaseFinalQF] = useState({})
+  const [marcadorFaseFinalSF, setMarcadorFaseFinalSF] = useState({})
+  const [picksFaseFinalSF, setPicksFaseFinalSF] = useState({})
+  const [marcadorFaseFinalBF, setMarcadorFaseFinalBF] = useState({})
+  const [picksFaseFinalBF, setPicksFaseFinalBF] = useState({})
+  const [marcadorFaseFinalFinal, setMarcadorFaseFinalFinal] = useState({})
+  const [picksFaseFinalFinal, setPicksFaseFinalFinal] = useState({})
   const [modalFaseFinalEtapa, setModalFaseFinalEtapa] = useState("R32")
   const [modalUsuario, setModalUsuario] = useState(null)
   const [modalUsuarioFaseFinal, setModalUsuarioFaseFinal] = useState(null)
@@ -171,6 +187,42 @@ export default function App() {
   const [mensajeR16, setMensajeR16] = useState("")
   const [guardadoR16, setGuardadoR16] = useState(false)
 
+  // === QF (Cuartos de Final) - completamente separado de R16 ===
+  const [pronosticosQF, setPronosticosQF] = useState({})
+  const [enviadoQF, setEnviadoQF] = useState(false)
+
+  const [resultadosQF, setResultadosQF] = useState({})
+  const [marcadoresQF, setMarcadoresQF] = useState({})
+  const [mensajeQF, setMensajeQF] = useState("")
+  const [guardadoQF, setGuardadoQF] = useState(false)
+
+  // === SF (Semifinales) - completamente separado de QF ===
+  const [pronosticosSF, setPronosticosSF] = useState({})
+  const [enviadoSF, setEnviadoSF] = useState(false)
+
+  const [resultadosSF, setResultadosSF] = useState({})
+  const [marcadoresSF, setMarcadoresSF] = useState({})
+  const [mensajeSF, setMensajeSF] = useState("")
+  const [guardadoSF, setGuardadoSF] = useState(false)
+
+  // === BF (Tercer Puesto) - completamente separado de BF ===
+  const [pronosticosBF, setPronosticosBF] = useState({})
+  const [enviadoBF, setEnviadoBF] = useState(false)
+
+  const [resultadosBF, setResultadosBF] = useState({})
+  const [marcadoresBF, setMarcadoresBF] = useState({})
+  const [mensajeBF, setMensajeBF] = useState("")
+  const [guardadoBF, setGuardadoBF] = useState(false)
+
+  // === FINAL (Gran Final) - completamente separado de BF ===
+  const [pronosticosFinal, setPronosticosFinal] = useState({})
+  const [enviadoFinal, setEnviadoFinal] = useState(false)
+
+  const [resultadosFinal, setResultadosFinal] = useState({})
+  const [marcadoresFinal, setMarcadoresFinal] = useState({})
+  const [mensajeFinal, setMensajeFinal] = useState("")
+  const [guardadoFinal, setGuardadoFinal] = useState(false)
+
   useEffect(() => {
     const handleScroll = () => {
       const scrollActual = window.scrollY
@@ -195,6 +247,10 @@ export default function App() {
       cargarResultados()
       cargarResultadosR32()
       cargarResultadosR16()
+      cargarResultadosQF()
+      cargarResultadosSF()
+      cargarResultadosBF()
+      cargarResultadosFinal()
     }
   }, [usuario?.uid])
 
@@ -231,9 +287,17 @@ export default function App() {
       cargarPronosticos(cred.user.uid),
       cargarPronosticosR32(cred.user.uid),
       cargarPronosticosR16(cred.user.uid),
+      cargarPronosticosQF(cred.user.uid),
+      cargarPronosticosSF(cred.user.uid),
+      cargarPronosticosBF(cred.user.uid),
+      cargarPronosticosFinal(cred.user.uid),
       cargarResultados(),
       cargarResultadosR32(),
       cargarResultadosR16(),
+      cargarResultadosQF(),
+      cargarResultadosSF(),
+      cargarResultadosBF(),
+      cargarResultadosFinal(),
     ])
 
     resultadosCarga.forEach((r) => {
@@ -286,79 +350,79 @@ export default function App() {
   }
 
   const cargarTablaFaseFinal = async () => {
-    // === R32 (Dieciseisavos) ===
-    const pronSnapR32 = await getDocs(collection(db, "pronosticosR32"))
-    const resSnapR32 = await getDoc(doc(db, "resultadosR32", "oficial"))
-    const marcadoresOficialesR32 = resSnapR32.exists() ? resSnapR32.data().marcadores || {} : {}
+    // Carga genérica y blindada de una etapa de fase final: nunca tumba las
+    // demás etapas si a esta le faltan reglas de Firestore o falla la red.
+    const cargarInfoEtapa = async (coleccionPron, coleccionRes, partidos) => {
+      const info = {}
+      try {
+        const pronSnap = await getDocs(collection(db, coleccionPron))
+        const resSnap = await getDoc(doc(db, coleccionRes, "oficial"))
+        const marcadoresOficiales = resSnap.exists() ? resSnap.data().marcadores || {} : {}
+        pronSnap.forEach(d => {
+          const data = d.data()
+          if (data.email === ADMIN_EMAIL) return
+          const picks = data.picks || {}
+          let puntos = 0
+          partidos.forEach(p => {
+            if (picks[p.id] && marcadoresOficiales[p.id]) {
+              puntos += calcularPuntosR32(picks[p.id], marcadoresOficiales[p.id])
+            }
+          })
+          info[d.id] = { puntos, email: data.email, enviado: data.enviado, picks: data.picks }
+        })
+      } catch (e) {
+        console.error(`No se pudo cargar ${coleccionPron}/${coleccionRes} (revisa las reglas de Firestore):`, e)
+      }
+      return info
+    }
 
-    // === R16 (Octavos) ===
-    const pronSnapR16 = await getDocs(collection(db, "pronosticosR16"))
-    const resSnapR16 = await getDoc(doc(db, "resultadosR16", "oficial"))
-    const marcadoresOficialesR16 = resSnapR16.exists() ? resSnapR16.data().marcadores || {} : {}
+    // === R32 (Dieciseisavos), R16 (Octavos), QF (Cuartos), SF (Semifinales), BF (Tercer Puesto), FINAL ===
+    const [infoR32PorUid, infoR16PorUid, infoQFPorUid, infoSFPorUid, infoBFPorUid, infoFinalPorUid] = await Promise.all([
+      cargarInfoEtapa("pronosticosR32", "resultadosR32", PARTIDOS_R32),
+      cargarInfoEtapa("pronosticosR16", "resultadosR16", PARTIDOS_R16),
+      cargarInfoEtapa("pronosticosQF", "resultadosQF", PARTIDOS_QF),
+      cargarInfoEtapa("pronosticosSF", "resultadosSF", PARTIDOS_SF),
+      cargarInfoEtapa("pronosticosBF", "resultadosBF", PARTIDOS_BF),
+      cargarInfoEtapa("pronosticosFinal", "resultadosFinal", PARTIDOS_FINAL),
+    ])
 
-    // Mapa uid -> { puntosR16, enviadoR16 } calculado en tiempo real
-    const infoR16PorUid = {}
-    pronSnapR16.forEach(d => {
-      const data = d.data()
-      if (data.email === ADMIN_EMAIL) return
-      const picks = data.picks || {}
-      let puntos = 0
-      PARTIDOS_R16.forEach(p => {
-        if (picks[p.id] && marcadoresOficialesR16[p.id]) {
-          puntos += calcularPuntosR32(picks[p.id], marcadoresOficialesR16[p.id])
-        }
-      })
-      infoR16PorUid[d.id] = { puntos, enviado: data.enviado, picks: data.picks }
-    })
+    // Unimos TODOS los uids que aparezcan en cualquier etapa, para no dejar
+    // a nadie fuera (incluyendo casos raros de alguien con picks solo en una etapa).
+    const todosLosUids = new Set([
+      ...Object.keys(infoR32PorUid),
+      ...Object.keys(infoR16PorUid),
+      ...Object.keys(infoQFPorUid),
+      ...Object.keys(infoSFPorUid),
+      ...Object.keys(infoBFPorUid),
+      ...Object.keys(infoFinalPorUid),
+    ])
 
     const filas = []
-    const uidsVistos = new Set()
+    todosLosUids.forEach(uid => {
+      const r32 = infoR32PorUid[uid] || { puntos: 0 }
+      const r16 = infoR16PorUid[uid] || { puntos: 0 }
+      const qf = infoQFPorUid[uid] || { puntos: 0 }
+      const sf = infoSFPorUid[uid] || { puntos: 0 }
+      const bf = infoBFPorUid[uid] || { puntos: 0 }
+      const final = infoFinalPorUid[uid] || { puntos: 0 }
 
-    // Recorremos R32 (siempre existe primero) y sumamos lo que haya en R16
-    pronSnapR32.forEach(d => {
-      const data = d.data()
-      if (data.email === ADMIN_EMAIL) return
-
-      // Calcular puntos R32 en tiempo real basado en resultados actuales (nunca se pierde, se recalcula siempre)
-      const picks = data.picks || {}
-      let puntosR32 = 0
-      PARTIDOS_R32.forEach(p => {
-        if (picks[p.id] && marcadoresOficialesR32[p.id]) {
-          puntosR32 += calcularPuntosR32(picks[p.id], marcadoresOficialesR32[p.id])
-        }
-      })
-
-      const infoR16 = infoR16PorUid[d.id] || { puntos: 0 }
+      // Referencia para email/enviado/picks: preferimos siempre la etapa más
+      // "base" disponible (R32 primero, igual que se hacía antes).
+      const ref = infoR32PorUid[uid] || infoR16PorUid[uid] || infoQFPorUid[uid] || infoSFPorUid[uid] || infoBFPorUid[uid] || infoFinalPorUid[uid]
 
       filas.push({
-        uid: d.id,
-        email: data.email,
-        nombre: getNombre(data.email),
-        puntos: puntosR32 + infoR16.puntos,
-        puntosR32,
-        puntosR16: infoR16.puntos,
-        enviado: data.enviado,
-        picks: data.picks
-      })
-      uidsVistos.add(d.id)
-    })
-
-    // Por si algún usuario tiene pronósticos de R16 pero no de R32 (caso raro, para no dejarlo fuera)
-    pronSnapR16.forEach(d => {
-      const data = d.data()
-      if (data.email === ADMIN_EMAIL) return
-      if (uidsVistos.has(d.id)) return
-
-      const infoR16 = infoR16PorUid[d.id] || { puntos: 0 }
-      filas.push({
-        uid: d.id,
-        email: data.email,
-        nombre: getNombre(data.email),
-        puntos: infoR16.puntos,
-        puntosR32: 0,
-        puntosR16: infoR16.puntos,
-        enviado: data.enviado,
-        picks: data.picks
+        uid,
+        email: ref.email,
+        nombre: getNombre(ref.email),
+        puntos: r32.puntos + r16.puntos + qf.puntos + sf.puntos + bf.puntos + final.puntos,
+        puntosR32: r32.puntos,
+        puntosR16: r16.puntos,
+        puntosQF: qf.puntos,
+        puntosSF: sf.puntos,
+        puntosBF: bf.puntos,
+        puntosFinal: final.puntos,
+        enviado: ref.enviado,
+        picks: ref.picks
       })
     })
 
@@ -684,6 +748,526 @@ export default function App() {
     }
   }
 
+  // === QF (Cuartos) Functions ===
+  const cargarPronosticosQF = async (uid) => {
+    try {
+      const snap = await getDoc(doc(db, "pronosticosQF", uid))
+      if (snap.exists()) {
+        setPronosticosQF(snap.data().picks || {})
+        setEnviadoQF(snap.data().enviado || false)
+      }
+    } catch (e) {
+      console.error("No se pudo cargar pronosticosQF (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const cargarResultadosQF = async () => {
+    try {
+      const snap = await getDoc(doc(db, "resultadosQF", "oficial"))
+      if (snap.exists()) {
+        setResultadosQF(snap.data().picks || {})
+        setMarcadoresQF(snap.data().marcadores || {})
+      }
+    } catch (e) {
+      console.error("No se pudo cargar resultadosQF (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const enviarPronosticosQF = async () => {
+    if (Object.keys(pronosticosQF).length === 0) {
+      setMensajeQF("⚠️ Debes pronosticar al menos 1 partido antes de guardar.")
+      return
+    }
+    
+    // Validar que todos los pronósticos tengan AMBOS valores (local y visitante)
+    for (const [id, pronos] of Object.entries(pronosticosQF)) {
+      if (pronos.local === "" || pronos.local === undefined || pronos.visitante === "" || pronos.visitante === undefined) {
+        setMensajeQF("⚠️ Todos los pronósticos deben tener ambos marcadores (goles local y visitante).")
+        return
+      }
+    }
+    
+    try {
+      // Cargar datos actuales para preservar datos anteriores (incluyendo picks ya guardados)
+      const docSnap = await getDoc(doc(db, "pronosticosQF", usuario.uid))
+      const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      const picksActuales = datosActuales.picks || {}
+
+      // Fusionar: lo que ya estaba guardado + lo que hay en el estado local ahora mismo.
+      // Así nunca se borra un partido que ya se había guardado antes.
+      const picksFusionados = { ...picksActuales, ...pronosticosQF }
+      
+      const fecha = new Date().toISOString()
+      await setDoc(doc(db, "pronosticosQF", usuario.uid), {
+        ...datosActuales,
+        email: usuario.email, 
+        picks: picksFusionados, 
+        enviado: true, 
+        fechaEnvio: fecha
+      })
+      setPronosticosQF(picksFusionados) // sincroniza el estado local con lo realmente guardado
+      setEnviadoQF(true)
+      setGuardadoQF(true)
+      setMensajeQF("✅ ¡Pronósticos guardados!")
+
+      // Vuelve al estado normal después de 2 segundos
+      setTimeout(() => {
+        setGuardadoQF(false)
+      }, 2000)
+    } catch (e) {
+      setMensajeQF("Error al guardar. Intenta de nuevo.")
+    }
+  }
+
+  const limpiarPronosticosQF = async () => {
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos de Cuartos?")) return
+    try {
+      await deleteDoc(doc(db, "pronosticosQF", usuario.uid))
+      setPronosticosQF({})
+      setEnviadoQF(false)
+      setMensajeQF("🗑️ Pronósticos de Cuartos eliminados.")
+    } catch (e) {
+      setMensajeQF("Error al limpiar.")
+    }
+  }
+
+  const guardarResultadosQF = async () => {
+    try {
+      // Guardar marcadores y picks reales
+      await setDoc(doc(db, "resultadosQF", "oficial"), {
+        picks: resultadosQF,
+        marcadores: marcadoresQF,
+        fechaActualizacion: new Date().toISOString()
+      })
+
+      // Calcular puntos de todos los usuarios
+      const snap = await getDocs(collection(db, "pronosticosQF"))
+      const actualizaciones = []
+
+      snap.forEach(d => {
+        const data = d.data()
+        if (data.email === ADMIN_EMAIL) return
+
+        const picks = data.picks || {}
+        let puntajeTotal = 0
+
+        // Calcular puntos por cada partido
+        PARTIDOS_QF.forEach(p => {
+          if (picks[p.id] && marcadoresQF[p.id]) {
+            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresQF[p.id])
+          }
+        })
+
+        // Guardar puntos en el documento del usuario
+        actualizaciones.push(
+          setDoc(doc(db, "pronosticosQF", d.id), {
+            ...data,
+            puntajeQF: puntajeTotal
+          })
+        )
+      })
+
+      await Promise.all(actualizaciones)
+      setMensajeQF("✅ Resultados guardados y puntos calculados correctamente.")
+      
+      // Recargar tabla de fase final
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error(e)
+      setMensajeQF("Error al guardar resultados.")
+    }
+  }
+
+  // === SF (Semifinales) Functions ===
+  const cargarPronosticosSF = async (uid) => {
+    try {
+      const snap = await getDoc(doc(db, "pronosticosSF", uid))
+      if (snap.exists()) {
+        setPronosticosSF(snap.data().picks || {})
+        setEnviadoSF(snap.data().enviado || false)
+      }
+    } catch (e) {
+      console.error("No se pudo cargar pronosticosSF (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const cargarResultadosSF = async () => {
+    try {
+      const snap = await getDoc(doc(db, "resultadosSF", "oficial"))
+      if (snap.exists()) {
+        setResultadosSF(snap.data().picks || {})
+        setMarcadoresSF(snap.data().marcadores || {})
+      }
+    } catch (e) {
+      console.error("No se pudo cargar resultadosSF (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const enviarPronosticosSF = async () => {
+    if (Object.keys(pronosticosSF).length === 0) {
+      setMensajeSF("⚠️ Debes pronosticar al menos 1 partido antes de guardar.")
+      return
+    }
+    
+    // Validar que todos los pronósticos tengan AMBOS valores (local y visitante)
+    for (const [id, pronos] of Object.entries(pronosticosSF)) {
+      if (pronos.local === "" || pronos.local === undefined || pronos.visitante === "" || pronos.visitante === undefined) {
+        setMensajeSF("⚠️ Todos los pronósticos deben tener ambos marcadores (goles local y visitante).")
+        return
+      }
+    }
+    
+    try {
+      // Cargar datos actuales para preservar datos anteriores (incluyendo picks ya guardados)
+      const docSnap = await getDoc(doc(db, "pronosticosSF", usuario.uid))
+      const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      const picksActuales = datosActuales.picks || {}
+
+      // Fusionar: lo que ya estaba guardado + lo que hay en el estado local ahora mismo.
+      // Así nunca se borra un partido que ya se había guardado antes.
+      const picksFusionados = { ...picksActuales, ...pronosticosSF }
+      
+      const fecha = new Date().toISOString()
+      await setDoc(doc(db, "pronosticosSF", usuario.uid), {
+        ...datosActuales,
+        email: usuario.email, 
+        picks: picksFusionados, 
+        enviado: true, 
+        fechaEnvio: fecha
+      })
+      setPronosticosSF(picksFusionados) // sincroniza el estado local con lo realmente guardado
+      setEnviadoSF(true)
+      setGuardadoSF(true)
+      setMensajeSF("✅ ¡Pronósticos guardados!")
+
+      // Vuelve al estado normal después de 2 segundos
+      setTimeout(() => {
+        setGuardadoSF(false)
+      }, 2000)
+    } catch (e) {
+      setMensajeSF("Error al guardar. Intenta de nuevo.")
+    }
+  }
+
+  const limpiarPronosticosSF = async () => {
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos de Semifinales?")) return
+    try {
+      await deleteDoc(doc(db, "pronosticosSF", usuario.uid))
+      setPronosticosSF({})
+      setEnviadoSF(false)
+      setMensajeSF("🗑️ Pronósticos de Semifinales eliminados.")
+    } catch (e) {
+      setMensajeSF("Error al limpiar.")
+    }
+  }
+
+  const guardarResultadosSF = async () => {
+    try {
+      // Guardar marcadores y picks reales
+      await setDoc(doc(db, "resultadosSF", "oficial"), {
+        picks: resultadosSF,
+        marcadores: marcadoresSF,
+        fechaActualizacion: new Date().toISOString()
+      })
+
+      // Calcular puntos de todos los usuarios
+      const snap = await getDocs(collection(db, "pronosticosSF"))
+      const actualizaciones = []
+
+      snap.forEach(d => {
+        const data = d.data()
+        if (data.email === ADMIN_EMAIL) return
+
+        const picks = data.picks || {}
+        let puntajeTotal = 0
+
+        // Calcular puntos por cada partido
+        PARTIDOS_SF.forEach(p => {
+          if (picks[p.id] && marcadoresSF[p.id]) {
+            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresSF[p.id])
+          }
+        })
+
+        // Guardar puntos en el documento del usuario
+        actualizaciones.push(
+          setDoc(doc(db, "pronosticosSF", d.id), {
+            ...data,
+            puntajeSF: puntajeTotal
+          })
+        )
+      })
+
+      await Promise.all(actualizaciones)
+      setMensajeSF("✅ Resultados guardados y puntos calculados correctamente.")
+      
+      // Recargar tabla de fase final
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error(e)
+      setMensajeSF("Error al guardar resultados.")
+    }
+  }
+
+  // === BF (Tercer Puesto) Functions ===
+  const cargarPronosticosBF = async (uid) => {
+    try {
+      const snap = await getDoc(doc(db, "pronosticosBF", uid))
+      if (snap.exists()) {
+        setPronosticosBF(snap.data().picks || {})
+        setEnviadoBF(snap.data().enviado || false)
+      }
+    } catch (e) {
+      console.error("No se pudo cargar pronosticosBF (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const cargarResultadosBF = async () => {
+    try {
+      const snap = await getDoc(doc(db, "resultadosBF", "oficial"))
+      if (snap.exists()) {
+        setResultadosBF(snap.data().picks || {})
+        setMarcadoresBF(snap.data().marcadores || {})
+      }
+    } catch (e) {
+      console.error("No se pudo cargar resultadosBF (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const enviarPronosticosBF = async () => {
+    if (Object.keys(pronosticosBF).length === 0) {
+      setMensajeBF("⚠️ Debes pronosticar al menos 1 partido antes de guardar.")
+      return
+    }
+    
+    // Validar que todos los pronósticos tengan AMBOS valores (local y visitante)
+    for (const [id, pronos] of Object.entries(pronosticosBF)) {
+      if (pronos.local === "" || pronos.local === undefined || pronos.visitante === "" || pronos.visitante === undefined) {
+        setMensajeBF("⚠️ Todos los pronósticos deben tener ambos marcadores (goles local y visitante).")
+        return
+      }
+    }
+    
+    try {
+      // Cargar datos actuales para preservar datos anteriores (incluyendo picks ya guardados)
+      const docSnap = await getDoc(doc(db, "pronosticosBF", usuario.uid))
+      const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      const picksActuales = datosActuales.picks || {}
+
+      // Fusionar: lo que ya estaba guardado + lo que hay en el estado local ahora mismo.
+      // Así nunca se borra un partido que ya se había guardado antes.
+      const picksFusionados = { ...picksActuales, ...pronosticosBF }
+      
+      const fecha = new Date().toISOString()
+      await setDoc(doc(db, "pronosticosBF", usuario.uid), {
+        ...datosActuales,
+        email: usuario.email, 
+        picks: picksFusionados, 
+        enviado: true, 
+        fechaEnvio: fecha
+      })
+      setPronosticosBF(picksFusionados) // sincroniza el estado local con lo realmente guardado
+      setEnviadoBF(true)
+      setGuardadoBF(true)
+      setMensajeBF("✅ ¡Pronósticos guardados!")
+
+      // Vuelve al estado normal después de 2 segundos
+      setTimeout(() => {
+        setGuardadoBF(false)
+      }, 2000)
+    } catch (e) {
+      setMensajeBF("Error al guardar. Intenta de nuevo.")
+    }
+  }
+
+  const limpiarPronosticosBF = async () => {
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos de Tercer Puesto?")) return
+    try {
+      await deleteDoc(doc(db, "pronosticosBF", usuario.uid))
+      setPronosticosBF({})
+      setEnviadoBF(false)
+      setMensajeBF("🗑️ Pronósticos de Tercer Puesto eliminados.")
+    } catch (e) {
+      setMensajeBF("Error al limpiar.")
+    }
+  }
+
+  const guardarResultadosBF = async () => {
+    try {
+      // Guardar marcadores y picks reales
+      await setDoc(doc(db, "resultadosBF", "oficial"), {
+        picks: resultadosBF,
+        marcadores: marcadoresBF,
+        fechaActualizacion: new Date().toISOString()
+      })
+
+      // Calcular puntos de todos los usuarios
+      const snap = await getDocs(collection(db, "pronosticosBF"))
+      const actualizaciones = []
+
+      snap.forEach(d => {
+        const data = d.data()
+        if (data.email === ADMIN_EMAIL) return
+
+        const picks = data.picks || {}
+        let puntajeTotal = 0
+
+        // Calcular puntos por cada partido
+        PARTIDOS_BF.forEach(p => {
+          if (picks[p.id] && marcadoresBF[p.id]) {
+            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresBF[p.id])
+          }
+        })
+
+        // Guardar puntos en el documento del usuario
+        actualizaciones.push(
+          setDoc(doc(db, "pronosticosBF", d.id), {
+            ...data,
+            puntajeBF: puntajeTotal
+          })
+        )
+      })
+
+      await Promise.all(actualizaciones)
+      setMensajeBF("✅ Resultados guardados y puntos calculados correctamente.")
+      
+      // Recargar tabla de fase final
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error(e)
+      setMensajeBF("Error al guardar resultados.")
+    }
+  }
+
+  // === FINAL (Gran Final) Functions ===
+  const cargarPronosticosFinal = async (uid) => {
+    try {
+      const snap = await getDoc(doc(db, "pronosticosFinal", uid))
+      if (snap.exists()) {
+        setPronosticosFinal(snap.data().picks || {})
+        setEnviadoFinal(snap.data().enviado || false)
+      }
+    } catch (e) {
+      console.error("No se pudo cargar pronosticosFinal (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const cargarResultadosFinal = async () => {
+    try {
+      const snap = await getDoc(doc(db, "resultadosFinal", "oficial"))
+      if (snap.exists()) {
+        setResultadosFinal(snap.data().picks || {})
+        setMarcadoresFinal(snap.data().marcadores || {})
+      }
+    } catch (e) {
+      console.error("No se pudo cargar resultadosFinal (revisa las reglas de Firestore):", e)
+    }
+  }
+
+  const enviarPronosticosFinal = async () => {
+    if (Object.keys(pronosticosFinal).length === 0) {
+      setMensajeFinal("⚠️ Debes pronosticar al menos 1 partido antes de guardar.")
+      return
+    }
+    
+    // Validar que todos los pronósticos tengan AMBOS valores (local y visitante)
+    for (const [id, pronos] of Object.entries(pronosticosFinal)) {
+      if (pronos.local === "" || pronos.local === undefined || pronos.visitante === "" || pronos.visitante === undefined) {
+        setMensajeFinal("⚠️ Todos los pronósticos deben tener ambos marcadores (goles local y visitante).")
+        return
+      }
+    }
+    
+    try {
+      // Cargar datos actuales para preservar datos anteriores (incluyendo picks ya guardados)
+      const docSnap = await getDoc(doc(db, "pronosticosFinal", usuario.uid))
+      const datosActuales = docSnap.exists() ? docSnap.data() : {}
+      const picksActuales = datosActuales.picks || {}
+
+      // Fusionar: lo que ya estaba guardado + lo que hay en el estado local ahora mismo.
+      // Así nunca se borra un partido que ya se había guardado antes.
+      const picksFusionados = { ...picksActuales, ...pronosticosFinal }
+      
+      const fecha = new Date().toISOString()
+      await setDoc(doc(db, "pronosticosFinal", usuario.uid), {
+        ...datosActuales,
+        email: usuario.email, 
+        picks: picksFusionados, 
+        enviado: true, 
+        fechaEnvio: fecha
+      })
+      setPronosticosFinal(picksFusionados) // sincroniza el estado local con lo realmente guardado
+      setEnviadoFinal(true)
+      setGuardadoFinal(true)
+      setMensajeFinal("✅ ¡Pronósticos guardados!")
+
+      // Vuelve al estado normal después de 2 segundos
+      setTimeout(() => {
+        setGuardadoFinal(false)
+      }, 2000)
+    } catch (e) {
+      setMensajeFinal("Error al guardar. Intenta de nuevo.")
+    }
+  }
+
+  const limpiarPronosticosFinal = async () => {
+    if (!window.confirm("¿Seguro que quieres limpiar tus pronósticos de Final?")) return
+    try {
+      await deleteDoc(doc(db, "pronosticosFinal", usuario.uid))
+      setPronosticosFinal({})
+      setEnviadoFinal(false)
+      setMensajeFinal("🗑️ Pronósticos de Final eliminados.")
+    } catch (e) {
+      setMensajeFinal("Error al limpiar.")
+    }
+  }
+
+  const guardarResultadosFinal = async () => {
+    try {
+      // Guardar marcadores y picks reales
+      await setDoc(doc(db, "resultadosFinal", "oficial"), {
+        picks: resultadosFinal,
+        marcadores: marcadoresFinal,
+        fechaActualizacion: new Date().toISOString()
+      })
+
+      // Calcular puntos de todos los usuarios
+      const snap = await getDocs(collection(db, "pronosticosFinal"))
+      const actualizaciones = []
+
+      snap.forEach(d => {
+        const data = d.data()
+        if (data.email === ADMIN_EMAIL) return
+
+        const picks = data.picks || {}
+        let puntajeTotal = 0
+
+        // Calcular puntos por cada partido
+        PARTIDOS_FINAL.forEach(p => {
+          if (picks[p.id] && marcadoresFinal[p.id]) {
+            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresFinal[p.id])
+          }
+        })
+
+        // Guardar puntos en el documento del usuario
+        actualizaciones.push(
+          setDoc(doc(db, "pronosticosFinal", d.id), {
+            ...data,
+            puntajeFinal: puntajeTotal
+          })
+        )
+      })
+
+      await Promise.all(actualizaciones)
+      setMensajeFinal("✅ Resultados guardados y puntos calculados correctamente.")
+      
+      // Recargar tabla de fase final
+      await cargarTablaFaseFinal()
+    } catch (e) {
+      console.error(e)
+      setMensajeFinal("Error al guardar resultados.")
+    }
+  }
+
   const seleccionar = useCallback((partidoId, opcion) => {
     if (enviado || torneoFinalizado()) return
     setPronosticos(prev => ({ ...prev, [partidoId]: opcion }))
@@ -762,6 +1346,18 @@ export default function App() {
     setPronosticosR16({})
     setEnviadoR16(false)
     setMensajeR16("")
+    setPronosticosQF({})
+    setEnviadoQF(false)
+    setMensajeQF("")
+    setPronosticosSF({})
+    setEnviadoSF(false)
+    setMensajeSF("")
+    setPronosticosBF({})
+    setEnviadoBF(false)
+    setMensajeBF("")
+    setPronosticosFinal({})
+    setEnviadoFinal(false)
+    setMensajeFinal("")
     setTab("pronosticos")
     setTabla([])
     setTablaFaseFinal([])
@@ -778,7 +1374,7 @@ export default function App() {
     if (t === "tabla-fase-final") await cargarTablaFaseFinal()
     if (t === "grupos") { await cargarGrupos(); await cargarResultadosR32() }
     if (t === "perfil") await cargarPerfil()
-    if (t === "pronosticos") { await cargarResultadosR32(); await cargarResultadosR16() }
+    if (t === "pronosticos") { await cargarResultadosR32(); await cargarResultadosR16(); await cargarResultadosQF(); await cargarResultadosSF(); await cargarResultadosBF(); await cargarResultadosFinal() }
     if (t === "admin") { await cargarResultados(); await cargarResultadosR32(); await cargarUsuariosAdmin() }
   }
 
@@ -818,9 +1414,109 @@ export default function App() {
     const pronR16Snap = await getDoc(doc(db, "pronosticosR16", fila.uid))
     const picksR16 = pronR16Snap.exists() ? pronR16Snap.data().picks || {} : {}
 
+    // Cargar resultados oficiales de QF (cuartos de final)
+    // Envuelto en try/catch: si las reglas de Firestore para QF aún no están
+    // listas, el modal igual abre mostrando R32/R16.
+    let marcadoresQFData = {}
+    let picksQF = {}
+    try {
+      const resSnapQF = await getDoc(doc(db, "resultadosQF", "oficial"))
+      marcadoresQFData = resSnapQF.exists() ? resSnapQF.data().marcadores || {} : {}
+      marcadoresQFData = Object.entries(marcadoresQFData).reduce((acc, [id, marc]) => {
+        acc[id] = {
+          local: marc?.local ?? "",
+          visitante: marc?.visitante ?? ""
+        }
+        return acc
+      }, {})
+
+      // Cargar los pronósticos de QF de este usuario en particular
+      const pronQFSnap = await getDoc(doc(db, "pronosticosQF", fila.uid))
+      picksQF = pronQFSnap.exists() ? pronQFSnap.data().picks || {} : {}
+    } catch (e) {
+      console.error("No se pudo cargar QF en el modal (revisa las reglas de Firestore):", e)
+    }
+
+    // Cargar resultados oficiales de SF (semifinales)
+    // Envuelto en try/catch: si las reglas de Firestore para SF aún no
+    // están listas, el modal igual abre mostrando R32/R16/QF.
+    let marcadoresSFData = {}
+    let picksSF = {}
+    try {
+      const resSnapSF = await getDoc(doc(db, "resultadosSF", "oficial"))
+      marcadoresSFData = resSnapSF.exists() ? resSnapSF.data().marcadores || {} : {}
+      marcadoresSFData = Object.entries(marcadoresSFData).reduce((acc, [id, marc]) => {
+        acc[id] = {
+          local: marc?.local ?? "",
+          visitante: marc?.visitante ?? ""
+        }
+        return acc
+      }, {})
+
+      // Cargar los pronósticos de SF de este usuario en particular
+      const pronSFSnap = await getDoc(doc(db, "pronosticosSF", fila.uid))
+      picksSF = pronSFSnap.exists() ? pronSFSnap.data().picks || {} : {}
+    } catch (e) {
+      console.error("No se pudo cargar SF en el modal (revisa las reglas de Firestore):", e)
+    }
+
+    // Cargar resultados oficiales de BF (tercer puesto)
+    // Envuelto en try/catch: si las reglas de Firestore para BF aún no
+    // están listas, el modal igual abre mostrando R32/R16/QF.
+    let marcadoresBFData = {}
+    let picksBF = {}
+    try {
+      const resSnapBF = await getDoc(doc(db, "resultadosBF", "oficial"))
+      marcadoresBFData = resSnapBF.exists() ? resSnapBF.data().marcadores || {} : {}
+      marcadoresBFData = Object.entries(marcadoresBFData).reduce((acc, [id, marc]) => {
+        acc[id] = {
+          local: marc?.local ?? "",
+          visitante: marc?.visitante ?? ""
+        }
+        return acc
+      }, {})
+
+      // Cargar los pronósticos de BF de este usuario en particular
+      const pronBFSnap = await getDoc(doc(db, "pronosticosBF", fila.uid))
+      picksBF = pronBFSnap.exists() ? pronBFSnap.data().picks || {} : {}
+    } catch (e) {
+      console.error("No se pudo cargar BF en el modal (revisa las reglas de Firestore):", e)
+    }
+
+    // Cargar resultados oficiales de Final (gran final)
+    // Envuelto en try/catch: si las reglas de Firestore para Final aún no
+    // están listas, el modal igual abre mostrando R32/R16/QF.
+    let marcadoresFinalData = {}
+    let picksFinal = {}
+    try {
+      const resSnapFinal = await getDoc(doc(db, "resultadosFinal", "oficial"))
+      marcadoresFinalData = resSnapFinal.exists() ? resSnapFinal.data().marcadores || {} : {}
+      marcadoresFinalData = Object.entries(marcadoresFinalData).reduce((acc, [id, marc]) => {
+        acc[id] = {
+          local: marc?.local ?? "",
+          visitante: marc?.visitante ?? ""
+        }
+        return acc
+      }, {})
+
+      // Cargar los pronósticos de Final de este usuario en particular
+      const pronFinalSnap = await getDoc(doc(db, "pronosticosFinal", fila.uid))
+      picksFinal = pronFinalSnap.exists() ? pronFinalSnap.data().picks || {} : {}
+    } catch (e) {
+      console.error("No se pudo cargar Final en el modal (revisa las reglas de Firestore):", e)
+    }
+
     setMarcadorFaseFinal(marcadores)
     setMarcadorFaseFinalR16(marcadoresR16Data)
     setPicksFaseFinalR16(picksR16)
+    setMarcadorFaseFinalQF(marcadoresQFData)
+    setPicksFaseFinalQF(picksQF)
+    setMarcadorFaseFinalSF(marcadoresSFData)
+    setPicksFaseFinalSF(picksSF)
+    setMarcadorFaseFinalBF(marcadoresBFData)
+    setPicksFaseFinalBF(picksBF)
+    setMarcadorFaseFinalFinal(marcadoresFinalData)
+    setPicksFaseFinalFinal(picksFinal)
     setModalFaseFinalEtapa("R32")
     setModalUsuarioFaseFinal(fila)
   }
@@ -966,6 +1662,34 @@ export default function App() {
     }
 
     dibujarSeccion("OCTAVOS (R16)", PARTIDOS_R16, picksFaseFinalR16, marcadorFaseFinalR16)
+
+    if (y > 250) {
+      doc.addPage()
+      y = 20
+    }
+
+    dibujarSeccion("CUARTOS (QF)", PARTIDOS_QF, picksFaseFinalQF, marcadorFaseFinalQF)
+
+    if (y > 250) {
+      doc.addPage()
+      y = 20
+    }
+
+    dibujarSeccion("SEMIFINALES (SF)", PARTIDOS_SF, picksFaseFinalSF, marcadorFaseFinalSF)
+
+    if (y > 250) {
+      doc.addPage()
+      y = 20
+    }
+
+    dibujarSeccion("TERCER PUESTO (BF)", PARTIDOS_BF, picksFaseFinalBF, marcadorFaseFinalBF)
+
+    if (y > 250) {
+      doc.addPage()
+      y = 20
+    }
+
+    dibujarSeccion("GRAN FINAL", PARTIDOS_FINAL, picksFaseFinalFinal, marcadorFaseFinalFinal)
 
     doc.save(`Pronosticos_FaseFinal_${usuario.nombre}.pdf`)
   }
@@ -1460,7 +2184,7 @@ export default function App() {
 
           {tab === "fase-final" && (
             <>
-              {etapaFaseFinal !== "DIECISEISAVOS" && etapaFaseFinal !== "OCTAVOS" && (
+              {etapaFaseFinal !== "DIECISEISAVOS" && etapaFaseFinal !== "OCTAVOS" && etapaFaseFinal !== "CUARTOS" && etapaFaseFinal !== "SEMIFINALES" && etapaFaseFinal !== "TERCER PUESTO" && etapaFaseFinal !== "FINAL" && (
                 <p className="grupo-titulo" style={{ marginTop: "40px", textAlign: "center", color: "#ffffff44", fontSize: "0.9rem", fontWeight: "600" }}>
                   🛠️ Fase Final - PROXIMAMENTE
                 </p>
@@ -1590,6 +2314,264 @@ export default function App() {
                         🗑️ LIMPIAR MIS PRONÓSTICOS
                       </button>
                       {enviadoR16 && (
+                        <p className="msg-enviado" style={{ marginTop: "12px" }}>
+                          ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#ffffff44", textAlign: "center" }}>Haz pronósticos para poder guardarlos</p>
+                  )}
+                </>
+              )}
+
+              {etapaFaseFinal === "CUARTOS" && (
+                <>
+                  <div style={{ marginBottom: "18px" }}>
+                    <div className="progreso-texto" style={{ textAlign: "right" }}>
+                      {PARTIDOS_QF.filter(p => pronosticosQF[p.id]?.local !== undefined && pronosticosQF[p.id]?.local !== "" && pronosticosQF[p.id]?.visitante !== undefined && pronosticosQF[p.id]?.visitante !== "").length}/{PARTIDOS_QF.length} partidos pronosticados
+                    </div>
+                    <div className="progreso-bar">
+                      <div
+                        className="progreso-fill"
+                        style={{ width: `${(PARTIDOS_QF.filter(p => pronosticosQF[p.id]?.local !== undefined && pronosticosQF[p.id]?.local !== "" && pronosticosQF[p.id]?.visitante !== undefined && pronosticosQF[p.id]?.visitante !== "").length / PARTIDOS_QF.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {PARTIDOS_QF.map((partido) => (
+                    <PartidoCardQF
+                      key={partido.id}
+                      partido={partido}
+                      esAdmin={false}
+                      marcadoresQF={marcadoresQF}
+                      pronosticosQF={pronosticosQF}
+                      setMarcadoresQF={setMarcadoresQF}
+                      setPronosticosQF={setPronosticosQF}
+                      enviadoQF={enviadoQF}
+                      qfCerrado={torneoFinalizado()}
+                      tab="fase-final"
+                      renderEstadoPronostico={renderEstadoPronostico}
+                      renderEstado={renderEstado}
+                    />
+                  ))}
+
+                  {mensajeQF && (
+                    <p className={mensajeQF.startsWith("✅") || mensajeQF.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>
+                      {mensajeQF}
+                    </p>
+                  )}
+
+                  {Object.keys(pronosticosQF).length > 0 ? (
+                    <>
+                      <button 
+                        className="btn-enviar" 
+                        onClick={enviarPronosticosQF}
+                        disabled={false}
+                        style={{
+                          opacity: false ? 0.5 : 1,
+                          cursor: false ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {guardadoQF ? "✅ ¡GUARDADO!" : "💾 GUARDAR PRONÓSTICOS"}  
+                      </button>
+                      <button className="btn-limpiar" onClick={limpiarPronosticosQF}>
+                        🗑️ LIMPIAR MIS PRONÓSTICOS
+                      </button>
+                      {enviadoQF && (
+                        <p className="msg-enviado" style={{ marginTop: "12px" }}>
+                          ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#ffffff44", textAlign: "center" }}>Haz pronósticos para poder guardarlos</p>
+                  )}
+                </>
+              )}
+
+              {etapaFaseFinal === "SEMIFINALES" && (
+                <>
+                  <div style={{ marginBottom: "18px" }}>
+                    <div className="progreso-texto" style={{ textAlign: "right" }}>
+                      {PARTIDOS_SF.filter(p => pronosticosSF[p.id]?.local !== undefined && pronosticosSF[p.id]?.local !== "" && pronosticosSF[p.id]?.visitante !== undefined && pronosticosSF[p.id]?.visitante !== "").length}/{PARTIDOS_SF.length} partidos pronosticados
+                    </div>
+                    <div className="progreso-bar">
+                      <div
+                        className="progreso-fill"
+                        style={{ width: `${(PARTIDOS_SF.filter(p => pronosticosSF[p.id]?.local !== undefined && pronosticosSF[p.id]?.local !== "" && pronosticosSF[p.id]?.visitante !== undefined && pronosticosSF[p.id]?.visitante !== "").length / PARTIDOS_SF.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {PARTIDOS_SF.map((partido) => (
+                    <PartidoCardSF
+                      key={partido.id}
+                      partido={partido}
+                      esAdmin={false}
+                      marcadoresSF={marcadoresSF}
+                      pronosticosSF={pronosticosSF}
+                      setMarcadoresSF={setMarcadoresSF}
+                      setPronosticosSF={setPronosticosSF}
+                      enviadoSF={enviadoSF}
+                      sfCerrado={torneoFinalizado()}
+                      tab="fase-final"
+                      renderEstadoPronostico={renderEstadoPronostico}
+                      renderEstado={renderEstado}
+                    />
+                  ))}
+
+                  {mensajeSF && (
+                    <p className={mensajeSF.startsWith("✅") || mensajeSF.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>
+                      {mensajeSF}
+                    </p>
+                  )}
+
+                  {Object.keys(pronosticosSF).length > 0 ? (
+                    <>
+                      <button 
+                        className="btn-enviar" 
+                        onClick={enviarPronosticosSF}
+                        disabled={false}
+                        style={{
+                          opacity: false ? 0.5 : 1,
+                          cursor: false ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {guardadoSF ? "✅ ¡GUARDADO!" : "💾 GUARDAR PRONÓSTICOS"}  
+                      </button>
+                      <button className="btn-limpiar" onClick={limpiarPronosticosSF}>
+                        🗑️ LIMPIAR MIS PRONÓSTICOS
+                      </button>
+                      {enviadoSF && (
+                        <p className="msg-enviado" style={{ marginTop: "12px" }}>
+                          ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#ffffff44", textAlign: "center" }}>Haz pronósticos para poder guardarlos</p>
+                  )}
+                </>
+              )}
+              {etapaFaseFinal === "TERCER PUESTO" && (
+                <>
+                  <div style={{ marginBottom: "18px" }}>
+                    <div className="progreso-texto" style={{ textAlign: "right" }}>
+                      {PARTIDOS_BF.filter(p => pronosticosBF[p.id]?.local !== undefined && pronosticosBF[p.id]?.local !== "" && pronosticosBF[p.id]?.visitante !== undefined && pronosticosBF[p.id]?.visitante !== "").length}/{PARTIDOS_BF.length} partidos pronosticados
+                    </div>
+                    <div className="progreso-bar">
+                      <div
+                        className="progreso-fill"
+                        style={{ width: `${(PARTIDOS_BF.filter(p => pronosticosBF[p.id]?.local !== undefined && pronosticosBF[p.id]?.local !== "" && pronosticosBF[p.id]?.visitante !== undefined && pronosticosBF[p.id]?.visitante !== "").length / PARTIDOS_BF.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {PARTIDOS_BF.map((partido) => (
+                    <PartidoCardBF
+                      key={partido.id}
+                      partido={partido}
+                      esAdmin={false}
+                      marcadoresBF={marcadoresBF}
+                      pronosticosBF={pronosticosBF}
+                      setMarcadoresBF={setMarcadoresBF}
+                      setPronosticosBF={setPronosticosBF}
+                      enviadoBF={enviadoBF}
+                      bfCerrado={torneoFinalizado()}
+                      tab="fase-final"
+                      renderEstadoPronostico={renderEstadoPronostico}
+                      renderEstado={renderEstado}
+                    />
+                  ))}
+
+                  {mensajeBF && (
+                    <p className={mensajeBF.startsWith("✅") || mensajeBF.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>
+                      {mensajeBF}
+                    </p>
+                  )}
+
+                  {Object.keys(pronosticosBF).length > 0 ? (
+                    <>
+                      <button 
+                        className="btn-enviar" 
+                        onClick={enviarPronosticosBF}
+                        disabled={false}
+                        style={{
+                          opacity: false ? 0.5 : 1,
+                          cursor: false ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {guardadoBF ? "✅ ¡GUARDADO!" : "💾 GUARDAR PRONÓSTICOS"}  
+                      </button>
+                      <button className="btn-limpiar" onClick={limpiarPronosticosBF}>
+                        🗑️ LIMPIAR MIS PRONÓSTICOS
+                      </button>
+                      {enviadoBF && (
+                        <p className="msg-enviado" style={{ marginTop: "12px" }}>
+                          ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ color: "#ffffff44", textAlign: "center" }}>Haz pronósticos para poder guardarlos</p>
+                  )}
+                </>
+              )}
+              {etapaFaseFinal === "FINAL" && (
+                <>
+                  <div style={{ marginBottom: "18px" }}>
+                    <div className="progreso-texto" style={{ textAlign: "right" }}>
+                      {PARTIDOS_FINAL.filter(p => pronosticosFinal[p.id]?.local !== undefined && pronosticosFinal[p.id]?.local !== "" && pronosticosFinal[p.id]?.visitante !== undefined && pronosticosFinal[p.id]?.visitante !== "").length}/{PARTIDOS_FINAL.length} partidos pronosticados
+                    </div>
+                    <div className="progreso-bar">
+                      <div
+                        className="progreso-fill"
+                        style={{ width: `${(PARTIDOS_FINAL.filter(p => pronosticosFinal[p.id]?.local !== undefined && pronosticosFinal[p.id]?.local !== "" && pronosticosFinal[p.id]?.visitante !== undefined && pronosticosFinal[p.id]?.visitante !== "").length / PARTIDOS_FINAL.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {PARTIDOS_FINAL.map((partido) => (
+                    <PartidoCardFinal
+                      key={partido.id}
+                      partido={partido}
+                      esAdmin={false}
+                      marcadoresFinal={marcadoresFinal}
+                      pronosticosFinal={pronosticosFinal}
+                      setMarcadoresFinal={setMarcadoresFinal}
+                      setPronosticosFinal={setPronosticosFinal}
+                      enviadoFinal={enviadoFinal}
+                      finalCerrado={torneoFinalizado()}
+                      tab="fase-final"
+                      renderEstadoPronostico={renderEstadoPronostico}
+                      renderEstado={renderEstado}
+                    />
+                  ))}
+
+                  {mensajeFinal && (
+                    <p className={mensajeFinal.startsWith("✅") || mensajeFinal.startsWith("🗑️") ? "msg-enviado" : "msg-warning"}>
+                      {mensajeFinal}
+                    </p>
+                  )}
+
+                  {Object.keys(pronosticosFinal).length > 0 ? (
+                    <>
+                      <button 
+                        className="btn-enviar" 
+                        onClick={enviarPronosticosFinal}
+                        disabled={false}
+                        style={{
+                          opacity: false ? 0.5 : 1,
+                          cursor: false ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {guardadoFinal ? "✅ ¡GUARDADO!" : "💾 GUARDAR PRONÓSTICOS"}  
+                      </button>
+                      <button className="btn-limpiar" onClick={limpiarPronosticosFinal}>
+                        🗑️ LIMPIAR MIS PRONÓSTICOS
+                      </button>
+                      {enviadoFinal && (
                         <p className="msg-enviado" style={{ marginTop: "12px" }}>
                           ✅ Pronósticos guardados. Puedes editar cualquier pronóstico mientras haya tiempo disponible para ese partido.
                         </p>
@@ -2424,6 +3406,10 @@ export default function App() {
                 <button onClick={() => setAdminTab("resultados")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>📋 RESULTADOS</button>
                 <button onClick={() => setAdminTab("resultados-r32")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-r32" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-r32" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🏅 RESULTADOS R32</button>
                 <button onClick={() => setAdminTab("resultados-r16")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-r16" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-r16" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🏆 RESULTADOS R16</button>
+                <button onClick={() => setAdminTab("resultados-qf")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-qf" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-qf" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🎯 RESULTADOS QF</button>
+                <button onClick={() => setAdminTab("resultados-sf")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-sf" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-sf" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🥈 RESULTADOS SF</button>
+                <button onClick={() => setAdminTab("resultados-bf")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-bf" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-bf" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🥉 RESULTADOS BF</button>
+                <button onClick={() => setAdminTab("resultados-final")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "resultados-final" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "resultados-final" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>🏆 RESULTADOS FINAL</button>
                 <button onClick={() => setAdminTab("usuarios")} style={{ padding: "12px 28px", background: "transparent", border: "none", borderBottom: adminTab === "usuarios" ? "2px solid #ffd700" : "2px solid transparent", color: adminTab === "usuarios" ? "#ffd700" : "#ffffff44", fontWeight: "700", fontSize: "0.85rem", letterSpacing: "1px", cursor: "pointer", transition: "all 0.25s" }}>👥 USUARIOS</button>
               </div>
               {adminTab === "resultados" && (
@@ -2558,6 +3544,254 @@ export default function App() {
                   {mensajeR16 && <p className={mensajeR16.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeR16}</p>}
                 </>
               )}
+              {adminTab === "resultados-qf" && (
+                <>
+                  <p className="admin-titulo">🎯 Cuartos de Final — Resultados Reales</p>
+                  <div style={{ marginBottom: "20px" }}>
+                    <p style={{ color: "#ffd700", fontWeight: "700", marginBottom: "12px" }}>Ingresa los marcadores de los Cuartos de Final:</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                      {PARTIDOS_QF.map(partido => (
+                        <div key={partido.id} style={{ background: "#17212B", border: "1px solid #ffd70033", borderRadius: "8px", padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.local}</span>
+                            </div>
+                            <span style={{ color: "#ffd700", fontSize: "0.75rem" }}>vs</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "flex-end" }}>
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.visitante}</span>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresQF?.[partido.id]?.local ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoLocal = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresQF((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], local: nuevoLocal },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                            <span style={{ color: "#ffd700", fontSize: "1.5rem", fontWeight: "900" }}>-</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresQF?.[partido.id]?.visitante ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresQF((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], visitante: nuevoVisitante },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-guardar" onClick={guardarResultadosQF}>GUARDAR RESULTADOS QF</button>
+                  {mensajeQF && <p className={mensajeQF.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeQF}</p>}
+                </>
+              )}
+              {adminTab === "resultados-sf" && (
+                <>
+                  <p className="admin-titulo">🥈 Semifinales — Resultados Reales</p>
+                  <div style={{ marginBottom: "20px" }}>
+                    <p style={{ color: "#ffd700", fontWeight: "700", marginBottom: "12px" }}>Ingresa los marcadores de los Semifinales:</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                      {PARTIDOS_SF.map(partido => (
+                        <div key={partido.id} style={{ background: "#17212B", border: "1px solid #ffd70033", borderRadius: "8px", padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.local}</span>
+                            </div>
+                            <span style={{ color: "#ffd700", fontSize: "0.75rem" }}>vs</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "flex-end" }}>
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.visitante}</span>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresSF?.[partido.id]?.local ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoLocal = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresSF((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], local: nuevoLocal },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                            <span style={{ color: "#ffd700", fontSize: "1.5rem", fontWeight: "900" }}>-</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresSF?.[partido.id]?.visitante ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresSF((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], visitante: nuevoVisitante },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-guardar" onClick={guardarResultadosSF}>GUARDAR RESULTADOS SF</button>
+                  {mensajeSF && <p className={mensajeSF.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeSF}</p>}
+                </>
+              )}
+              {adminTab === "resultados-bf" && (
+                <>
+                  <p className="admin-titulo">🥉 Tercer Puesto — Resultados Reales</p>
+                  <div style={{ marginBottom: "20px" }}>
+                    <p style={{ color: "#ffd700", fontWeight: "700", marginBottom: "12px" }}>Ingresa los marcadores de el Tercer Puesto:</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                      {PARTIDOS_BF.map(partido => (
+                        <div key={partido.id} style={{ background: "#17212B", border: "1px solid #ffd70033", borderRadius: "8px", padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.local}</span>
+                            </div>
+                            <span style={{ color: "#ffd700", fontSize: "0.75rem" }}>vs</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "flex-end" }}>
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.visitante}</span>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresBF?.[partido.id]?.local ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoLocal = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresBF((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], local: nuevoLocal },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                            <span style={{ color: "#ffd700", fontSize: "1.5rem", fontWeight: "900" }}>-</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresBF?.[partido.id]?.visitante ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresBF((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], visitante: nuevoVisitante },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-guardar" onClick={guardarResultadosBF}>GUARDAR RESULTADOS BF</button>
+                  {mensajeBF && <p className={mensajeBF.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeBF}</p>}
+                </>
+              )}
+              {adminTab === "resultados-final" && (
+                <>
+                  <p className="admin-titulo">🏆 Gran Final — Resultados Reales</p>
+                  <div style={{ marginBottom: "20px" }}>
+                    <p style={{ color: "#ffd700", fontWeight: "700", marginBottom: "12px" }}>Ingresa los marcadores de la Gran Final:</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                      {PARTIDOS_FINAL.map(partido => (
+                        <div key={partido.id} style={{ background: "#17212B", border: "1px solid #ffd70033", borderRadius: "8px", padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagLocal}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.local}</span>
+                            </div>
+                            <span style={{ color: "#ffd700", fontSize: "0.75rem" }}>vs</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, justifyContent: "flex-end" }}>
+                              <span style={{ color: "#ffffff88", fontSize: "0.85rem", fontWeight: "600" }}>{partido.visitante}</span>
+                              <img loading="lazy" src={`https://flagcdn.com/w40/${partido.flagVisitante}.png`} alt="" style={{ borderRadius: "3px", width: "30px", height: "20px" }} onError={(e) => e.target.style.display = "none"} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresFinal?.[partido.id]?.local ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoLocal = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresFinal((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], local: nuevoLocal },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                            <span style={{ color: "#ffd700", fontSize: "1.5rem", fontWeight: "900" }}>-</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength="2"
+                              value={marcadoresFinal?.[partido.id]?.visitante ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "")
+                                const nuevoVisitante = val === "" ? "" : parseInt(val, 10)
+                                setMarcadoresFinal((prev) => ({
+                                  ...prev,
+                                  [partido.id]: { ...prev?.[partido.id], visitante: nuevoVisitante },
+                                }))
+                              }}
+                              style={{ width: "50px", height: "50px", textAlign: "center", fontSize: "1.5rem", fontWeight: "900", background: "#0a1419", border: "2px solid #ffd70044", borderRadius: "6px", color: "#ffd700", outline: "none" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn-guardar" onClick={guardarResultadosFinal}>GUARDAR RESULTADOS FINAL</button>
+                  {mensajeFinal && <p className={mensajeFinal.startsWith("✅") ? "msg-enviado" : "msg-warning"}>{mensajeFinal}</p>}
+                </>
+              )}
               {adminTab === "usuarios" && (
                 <>
                   <p className="admin-titulo">👥 Gestión de Usuarios</p>
@@ -2632,6 +3866,10 @@ export default function App() {
               <div className="modal-grupos">
                 <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "R32" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("R32")}>🏁 DIECISEISAVOS (R32)</button>
                 <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "R16" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("R16")}>⚽ OCTAVOS (R16)</button>
+                <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "QF" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("QF")}>🎯 CUARTOS (QF)</button>
+                <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "SF" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("SF")}>🥈 SEMIFINALES (SF)</button>
+                <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "BF" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("BF")}>🥉 TERCER PUESTO (BF)</button>
+                <button className={`modal-grupo-tab ${modalFaseFinalEtapa === "FINAL" ? "activo" : ""}`} onClick={() => setModalFaseFinalEtapa("FINAL")}>🏆 FINAL</button>
               </div>
               <div style={{ padding: "20px 28px", overflow: "auto", maxHeight: "60vh" }}>
                 <div style={{ marginBottom: "20px", display: "flex", gap: "10px" }}>
@@ -2644,9 +3882,9 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(modalFaseFinalEtapa === "R32" ? PARTIDOS_R32 : PARTIDOS_R16).map(partido => {
-                      const pick = modalFaseFinalEtapa === "R32" ? modalUsuarioFaseFinal.picks?.[partido.id] : picksFaseFinalR16?.[partido.id]
-                      const marcador = modalFaseFinalEtapa === "R32" ? marcadorFaseFinal[partido.id] : marcadorFaseFinalR16[partido.id]
+                    {(modalFaseFinalEtapa === "R32" ? PARTIDOS_R32 : modalFaseFinalEtapa === "R16" ? PARTIDOS_R16 : modalFaseFinalEtapa === "QF" ? PARTIDOS_QF : modalFaseFinalEtapa === "SF" ? PARTIDOS_SF : modalFaseFinalEtapa === "BF" ? PARTIDOS_BF : PARTIDOS_FINAL).map(partido => {
+                      const pick = modalFaseFinalEtapa === "R32" ? modalUsuarioFaseFinal.picks?.[partido.id] : modalFaseFinalEtapa === "R16" ? picksFaseFinalR16?.[partido.id] : modalFaseFinalEtapa === "QF" ? picksFaseFinalQF?.[partido.id] : modalFaseFinalEtapa === "SF" ? picksFaseFinalSF?.[partido.id] : modalFaseFinalEtapa === "BF" ? picksFaseFinalBF?.[partido.id] : picksFaseFinalFinal?.[partido.id]
+                      const marcador = modalFaseFinalEtapa === "R32" ? marcadorFaseFinal[partido.id] : modalFaseFinalEtapa === "R16" ? marcadorFaseFinalR16[partido.id] : modalFaseFinalEtapa === "QF" ? marcadorFaseFinalQF[partido.id] : modalFaseFinalEtapa === "SF" ? marcadorFaseFinalSF[partido.id] : modalFaseFinalEtapa === "BF" ? marcadorFaseFinalBF[partido.id] : marcadorFaseFinalFinal[partido.id]
                       const puntos = calcularPuntosR32(pick, marcador)
                       return (
                         <tr key={partido.id}>
