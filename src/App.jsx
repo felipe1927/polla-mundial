@@ -122,7 +122,15 @@ const GRUPOS = {
   ],
 }
 
-const TODOS_PARTIDOS = [...Object.values(GRUPOS).flat(), ...PARTIDOS_R32]
+const TODOS_PARTIDOS = [
+  ...Object.values(GRUPOS).flat(),
+  ...PARTIDOS_R32,
+  ...PARTIDOS_R16.map(p => ({ ...p, fase: "R16" })),
+  ...PARTIDOS_QF.map(p => ({ ...p, fase: "QF" })),
+  ...PARTIDOS_SF.map(p => ({ ...p, fase: "SF" })),
+  ...PARTIDOS_BF.map(p => ({ ...p, fase: "BF" })),
+  ...PARTIDOS_FINAL.map(p => ({ ...p, fase: "FINAL" })),
+]
 
   // Lista de partidos ordenada por fecha (datos estáticos, se ordena una vez)
   const sortedPartidos = [...TODOS_PARTIDOS].sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
@@ -2103,7 +2111,15 @@ export default function App() {
       <style>{STYLES}</style>
       <TickerBar
         partidos={TODOS_PARTIDOS}
-        marcadores={{ ...marcadores, ...marcadoresR32 }}
+        marcadores={{
+          ...marcadores,
+          ...marcadoresR32,
+          ...marcadoresR16,
+          ...marcadoresQF,
+          ...marcadoresSF,
+          ...marcadoresBF,
+          ...marcadoresFinal,
+        }}
         ahora={ahora}
         getEstadoPartido={getEstadoPartido}
         formatHora={formatHora}

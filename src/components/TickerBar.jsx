@@ -1,6 +1,16 @@
 
 
+const FASE_LABELS = {
+  R32: 'R32',
+  R16: 'R16',
+  QF: 'CUARTOS',
+  SF: 'SEMIFINAL',
+  BF: '3ER PUESTO',
+  FINAL: 'FINAL',
+}
+
 const getGrupoDePartido = (partido) => {
+  if (partido.fase) return partido.fase
   if (partido.id.charAt(0) === 'W') return 'R32'
   return partido.id.charAt(0)
 }
@@ -49,7 +59,7 @@ export default function TickerBar({ partidos, marcadores, ahora, getEstadoPartid
         <span className="ticker-equipo">{partido.visitante}</span>
         <img loading="lazy" className="ticker-flag" src={`https://flagcdn.com/w20/${partido.flagVisitante}.png`} alt="" />
 
-        <span className="ticker-grupo">{grupo === 'R32' ? 'R32' : `GRUPO ${grupo}`}</span>
+        <span className="ticker-grupo">{FASE_LABELS[grupo] ? FASE_LABELS[grupo] : `GRUPO ${grupo}`}</span>
       </div>
     )
   }
