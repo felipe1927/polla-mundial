@@ -360,7 +360,7 @@ export default function App() {
   const cargarTablaFaseFinal = async () => {
     // Carga genérica y blindada de una etapa de fase final: nunca tumba las
     // demás etapas si a esta le faltan reglas de Firestore o falla la red.
-    const cargarInfoEtapa = async (coleccionPron, coleccionRes, partidos) => {
+    const cargarInfoEtapa = async (coleccionPron, coleccionRes, partidos, calcularPuntos = calcularPuntosR32) => {
       const info = {}
       try {
         const pronSnap = await getDocs(collection(db, coleccionPron))
@@ -373,7 +373,7 @@ export default function App() {
           let puntos = 0
           partidos.forEach(p => {
             if (picks[p.id] && marcadoresOficiales[p.id]) {
-              puntos += calcularPuntosR32(picks[p.id], marcadoresOficiales[p.id])
+              puntos += calcularPuntos(picks[p.id], marcadoresOficiales[p.id])
             }
           })
           info[d.id] = { puntos, email: data.email, enviado: data.enviado, picks: data.picks }
@@ -385,13 +385,14 @@ export default function App() {
     }
 
     // === R32 (Dieciseisavos), R16 (Octavos), QF (Cuartos), SF (Semifinales), BF (Tercer Puesto), FINAL ===
+    // Solo la FINAL recibe calcularPuntosFinal (x2). Las demás etapas siguen usando calcularPuntosR32 intacta.
     const [infoR32PorUid, infoR16PorUid, infoQFPorUid, infoSFPorUid, infoBFPorUid, infoFinalPorUid] = await Promise.all([
       cargarInfoEtapa("pronosticosR32", "resultadosR32", PARTIDOS_R32),
       cargarInfoEtapa("pronosticosR16", "resultadosR16", PARTIDOS_R16),
       cargarInfoEtapa("pronosticosQF", "resultadosQF", PARTIDOS_QF),
       cargarInfoEtapa("pronosticosSF", "resultadosSF", PARTIDOS_SF),
       cargarInfoEtapa("pronosticosBF", "resultadosBF", PARTIDOS_BF),
-      cargarInfoEtapa("pronosticosFinal", "resultadosFinal", PARTIDOS_FINAL),
+      cargarInfoEtapa("pronosticosFinal", "resultadosFinal", PARTIDOS_FINAL, calcularPuntosFinal),
     ])
 
     // Unimos TODOS los uids que aparezcan en cualquier etapa, para no dejar
@@ -1249,10 +1250,10 @@ export default function App() {
         const picks = data.picks || {}
         let puntajeTotal = 0
 
-        // Calcular puntos por cada partido
+        // Calcular puntos por cada partido (la GRAN FINAL vale x2)
         PARTIDOS_FINAL.forEach(p => {
           if (picks[p.id] && marcadoresFinal[p.id]) {
-            puntajeTotal += calcularPuntosR32(picks[p.id], marcadoresFinal[p.id])
+            puntajeTotal += calcularPuntosFinal(picks[p.id], marcadoresFinal[p.id])
           }
         })
 
@@ -1573,6 +1574,10 @@ export default function App() {
     return 3
   }
 
+  // La GRAN FINAL vale doble en todos los escenarios posibles (0,3,5,7,10 -> 0,6,10,14,20).
+  // No se toca calcularPuntosR32: esta función solo la envuelve y multiplica x2.
+  const calcularPuntosFinal = (pick, marcador) => calcularPuntosR32(pick, marcador) * 2
+
   const exportarPDF = (usuario) => {
     const doc = new jsPDF()
     
@@ -1604,7 +1609,7 @@ export default function App() {
       doc.setFontSize(8)
     }
 
-    const dibujarSeccion = (titulo, partidos, picks, marcadores) => {
+    const dibujarSeccion = (titulo, partidos, picks, marcadores, multiplicador = 1) => {
       // Título de la etapa
       doc.setFontSize(12)
       doc.setTextColor(255, 215, 0)
@@ -1630,7 +1635,7 @@ export default function App() {
         let puntos = 0
 
         if (pick && marcador && marcador.local !== "") {
-          puntos = calcularPuntosR32(pick, marcador)
+          puntos = calcularPuntosR32(pick, marcador) * multiplicador
           estado = puntos > 0 ? "Ganada" : "Perdida"
         } else if (!pick) {
           estado = "No pronóstico"
@@ -1697,7 +1702,7 @@ export default function App() {
       y = 20
     }
 
-    dibujarSeccion("GRAN FINAL", PARTIDOS_FINAL, picksFaseFinalFinal, marcadorFaseFinalFinal)
+    dibujarSeccion("GRAN FINAL", PARTIDOS_FINAL, picksFaseFinalFinal, marcadorFaseFinalFinal, 2)
 
     doc.save(`Pronosticos_FaseFinal_${usuario.nombre}.pdf`)
   }
@@ -3901,7 +3906,8 @@ export default function App() {
                     {(modalFaseFinalEtapa === "R32" ? PARTIDOS_R32 : modalFaseFinalEtapa === "R16" ? PARTIDOS_R16 : modalFaseFinalEtapa === "QF" ? PARTIDOS_QF : modalFaseFinalEtapa === "SF" ? PARTIDOS_SF : modalFaseFinalEtapa === "BF" ? PARTIDOS_BF : PARTIDOS_FINAL).map(partido => {
                       const pick = modalFaseFinalEtapa === "R32" ? modalUsuarioFaseFinal.picks?.[partido.id] : modalFaseFinalEtapa === "R16" ? picksFaseFinalR16?.[partido.id] : modalFaseFinalEtapa === "QF" ? picksFaseFinalQF?.[partido.id] : modalFaseFinalEtapa === "SF" ? picksFaseFinalSF?.[partido.id] : modalFaseFinalEtapa === "BF" ? picksFaseFinalBF?.[partido.id] : picksFaseFinalFinal?.[partido.id]
                       const marcador = modalFaseFinalEtapa === "R32" ? marcadorFaseFinal[partido.id] : modalFaseFinalEtapa === "R16" ? marcadorFaseFinalR16[partido.id] : modalFaseFinalEtapa === "QF" ? marcadorFaseFinalQF[partido.id] : modalFaseFinalEtapa === "SF" ? marcadorFaseFinalSF[partido.id] : modalFaseFinalEtapa === "BF" ? marcadorFaseFinalBF[partido.id] : marcadorFaseFinalFinal[partido.id]
-                      const puntos = calcularPuntosR32(pick, marcador)
+                      const puntosBase = calcularPuntosR32(pick, marcador)
+                      const puntos = modalFaseFinalEtapa === "FINAL" ? puntosBase * 2 : puntosBase
                       return (
                         <tr key={partido.id}>
                           <td style={{ color: "#ffffff88" }}>{partido.local} vs {partido.visitante}</td>
@@ -3912,7 +3918,7 @@ export default function App() {
                             {!marcador ? "⏳" : `${marcador.local ?? "-"}-${marcador.visitante ?? "-"}`}
                           </td>
                           <td>{!pick ? "—" : !marcador ? "⏳" : puntos > 0 ? "✅" : "❌"}</td>
-                          <td style={{ color: puntos === 10 ? "#ffd700" : puntos === 7 ? "#39ff6a" : puntos === 5 ? "#00aaff" : puntos === 3 ? "#ffffff88" : "#ff6b6b", fontWeight: "700" }}>
+                          <td style={{ color: puntosBase === 10 ? "#ffd700" : puntosBase === 7 ? "#39ff6a" : puntosBase === 5 ? "#00aaff" : puntosBase === 3 ? "#ffffff88" : "#ff6b6b", fontWeight: "700" }}>
                             {puntos} pts
                           </td>
                         </tr>

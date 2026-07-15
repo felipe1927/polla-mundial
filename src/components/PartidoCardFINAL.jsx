@@ -219,6 +219,7 @@ function PartidoCardFinal({
   const acertado = pickResultado && oficialResultado && pickResultado === oficialResultado
 
   return (
+    <>
     <div
       className="partido-card partido-card-final"
       style={{
@@ -500,6 +501,25 @@ function PartidoCardFinal({
         </p>
       )}
     </div>
+
+    <p
+      style={{
+        textAlign: "center",
+        color: "#17120a",
+        background: "linear-gradient(90deg, #ffd700, #fff3c4, #ffd700)",
+        fontSize: "1.05rem",
+        fontWeight: "900",
+        letterSpacing: "0.5px",
+        margin: "12px auto 0",
+        padding: "10px 14px",
+        borderRadius: "8px",
+        maxWidth: "100%",
+        boxShadow: "0 0 14px #ffd70055",
+      }}
+    >
+      ⭐ ESTE PARTIDO VALE DOBLE PUNTAJE (x2) ⭐
+    </p>
+    </>
   )
 }
 
